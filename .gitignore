@@ -1,0 +1,9 @@
+*.swp
+*.swo
+*~
+.DS_Store
+workspace/
+.claude/
+*.rock
+tools/node_modules/
+tools/package-lock.json

@@ -1,0 +1,447 @@
+{
+  "files": [
+    {
+      "path": "src/auth.ts",
+      "name": "auth",
+      "nodes": [
+        {
+          "kind": "interface",
+          "name": "AuthConfig",
+          "exported": true,
+          "field_count": 3,
+          "start_line": 1,
+          "end_line": 8,
+          "lines": 8,
+          "depth": 2,
+          "git_churn_30d": 2,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "interface",
+          "name": "User",
+          "exported": true,
+          "field_count": 5,
+          "start_line": 10,
+          "end_line": 18,
+          "lines": 9,
+          "depth": 2,
+          "git_churn_30d": 5,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "class",
+          "name": "AuthService",
+          "exported": true,
+          "start_line": 20,
+          "end_line": 95,
+          "lines": 76,
+          "depth": 2,
+          "git_churn_30d": 8,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "method",
+          "name": "authenticate",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 30,
+          "end_line": 62,
+          "lines": 33,
+          "params": 2,
+          "depth": 4,
+          "calls": [
+            { "symbol": "verifyPassword", "module": "crypto", "count": 1 },
+            { "symbol": "findByEmail", "module": "repository", "count": 1 },
+            { "symbol": "generateToken", "module": "token", "count": 1 }
+          ],
+          "git_churn_30d": 22,
+          "co_changes": {
+            "token::generateToken": 12,
+            "crypto::verifyPassword": 6,
+            "repository::findByEmail": 9
+          },
+          "coverage": 0.35
+        },
+        {
+          "kind": "method",
+          "name": "register",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 64,
+          "end_line": 85,
+          "lines": 22,
+          "params": 3,
+          "depth": 4,
+          "calls": [
+            { "symbol": "hashPassword", "module": "crypto", "count": 1 },
+            { "symbol": "create", "module": "repository", "count": 1 }
+          ],
+          "git_churn_30d": 14,
+          "co_changes": {
+            "crypto::hashPassword": 10,
+            "repository::create": 11
+          },
+          "coverage": 0.62
+        },
+        {
+          "kind": "method",
+          "name": "refreshToken",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 87,
+          "end_line": 95,
+          "lines": 9,
+          "params": 1,
+          "depth": 4,
+          "git_churn_30d": 6,
+          "co_changes": {
+            "token::validateToken": 7,
+            "token::generateToken": 6
+          },
+          "coverage": 0.48
+        }
+      ],
+      "imports": [
+        { "from": "./crypto", "names": ["hashPassword", "verifyPassword"] },
+        { "from": "./repository", "names": ["UserRepository"] },
+        { "from": "./token", "names": ["generateToken", "validateToken"] }
+      ],
+      "git_churn_30d": 24
+    },
+    {
+      "path": "src/crypto.ts",
+      "name": "crypto",
+      "nodes": [
+        {
+          "kind": "variable",
+          "name": "SALT_LENGTH",
+          "exported": true,
+          "start_line": 1,
+          "end_line": 1,
+          "lines": 1,
+          "depth": 2,
+          "git_churn_30d": 0,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "function",
+          "name": "hashPassword",
+          "exported": true,
+          "async": false,
+          "start_line": 5,
+          "end_line": 18,
+          "lines": 14,
+          "params": 2,
+          "depth": 2,
+          "git_churn_30d": 2,
+          "co_changes": {
+            "crypto::verifyPassword": 5
+          },
+          "coverage": 0.95
+        },
+        {
+          "kind": "function",
+          "name": "verifyPassword",
+          "exported": true,
+          "async": false,
+          "start_line": 20,
+          "end_line": 30,
+          "lines": 11,
+          "params": 2,
+          "depth": 2,
+          "git_churn_30d": 2,
+          "co_changes": {
+            "crypto::hashPassword": 5
+          },
+          "coverage": 0.88
+        },
+        {
+          "kind": "function",
+          "name": "generateSalt",
+          "exported": true,
+          "async": false,
+          "start_line": 32,
+          "end_line": 36,
+          "lines": 5,
+          "params": 0,
+          "depth": 2,
+          "git_churn_30d": 1,
+          "co_changes": {},
+          "coverage": 1.0
+        }
+      ],
+      "imports": [],
+      "git_churn_30d": 3
+    },
+    {
+      "path": "src/repository.ts",
+      "name": "repository",
+      "nodes": [
+        {
+          "kind": "interface",
+          "name": "CreateUserInput",
+          "exported": true,
+          "field_count": 4,
+          "start_line": 1,
+          "end_line": 8,
+          "lines": 8,
+          "depth": 2,
+          "git_churn_30d": 4,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "class",
+          "name": "UserRepository",
+          "exported": true,
+          "start_line": 10,
+          "end_line": 70,
+          "lines": 61,
+          "depth": 2,
+          "git_churn_30d": 3,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "method",
+          "name": "findById",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 15,
+          "end_line": 22,
+          "lines": 8,
+          "params": 1,
+          "depth": 4,
+          "git_churn_30d": 2,
+          "co_changes": {},
+          "coverage": 0.80
+        },
+        {
+          "kind": "method",
+          "name": "findByEmail",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 24,
+          "end_line": 35,
+          "lines": 12,
+          "params": 1,
+          "depth": 4,
+          "git_churn_30d": 5,
+          "co_changes": {
+            "repository::create": 4
+          },
+          "coverage": 0.75
+        },
+        {
+          "kind": "method",
+          "name": "create",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 37,
+          "end_line": 52,
+          "lines": 16,
+          "params": 1,
+          "depth": 4,
+          "git_churn_30d": 8,
+          "co_changes": {
+            "repository::findByEmail": 4
+          },
+          "coverage": 0.70
+        },
+        {
+          "kind": "method",
+          "name": "delete",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 54,
+          "end_line": 62,
+          "lines": 9,
+          "params": 1,
+          "depth": 4,
+          "git_churn_30d": 6,
+          "co_changes": {
+            "repository::findById": 3
+          },
+          "coverage": 0.45
+        },
+        {
+          "kind": "method",
+          "name": "count",
+          "exported": false,
+          "visibility": "public",
+          "async": true,
+          "start_line": 64,
+          "end_line": 68,
+          "lines": 5,
+          "params": 0,
+          "depth": 4,
+          "git_churn_30d": 0,
+          "co_changes": {},
+          "coverage": 1.0
+        }
+      ],
+      "imports": [],
+      "git_churn_30d": 18
+    },
+    {
+      "path": "src/token.ts",
+      "name": "token",
+      "nodes": [
+        {
+          "kind": "interface",
+          "name": "TokenPayload",
+          "exported": true,
+          "field_count": 3,
+          "start_line": 1,
+          "end_line": 6,
+          "lines": 6,
+          "depth": 2,
+          "git_churn_30d": 1,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "variable",
+          "name": "TOKEN_SECRET",
+          "exported": false,
+          "start_line": 8,
+          "end_line": 8,
+          "lines": 1,
+          "depth": 2,
+          "git_churn_30d": 0,
+          "co_changes": {},
+          "coverage": null
+        },
+        {
+          "kind": "function",
+          "name": "generateToken",
+          "exported": true,
+          "async": false,
+          "start_line": 10,
+          "end_line": 22,
+          "lines": 13,
+          "params": 1,
+          "depth": 2,
+          "git_churn_30d": 7,
+          "co_changes": {
+            "token::validateToken": 14,
+            "auth::authenticate": 12
+          },
+          "coverage": 0.82
+        },
+        {
+          "kind": "function",
+          "name": "validateToken",
+          "exported": true,
+          "async": false,
+          "start_line": 24,
+          "end_line": 40,
+          "lines": 17,
+          "params": 1,
+          "depth": 2,
+          "git_churn_30d": 8,
+          "co_changes": {
+            "token::generateToken": 14,
+            "auth::authenticate": 8
+          },
+          "coverage": 0.55
+        },
+        {
+          "kind": "function",
+          "name": "decodeTokenUnsafe",
+          "exported": true,
+          "async": false,
+          "start_line": 42,
+          "end_line": 48,
+          "lines": 7,
+          "params": 1,
+          "depth": 2,
+          "git_churn_30d": 0,
+          "co_changes": {},
+          "coverage": 0.0
+        }
+      ],
+      "imports": [],
+      "git_churn_30d": 9
+    },
+    {
+      "path": "src/errors.ts",
+      "name": "errors",
+      "nodes": [
+        {
+          "kind": "class",
+          "name": "AuthError",
+          "exported": true,
+          "start_line": 1,
+          "end_line": 12,
+          "lines": 12,
+          "depth": 2,
+          "git_churn_30d": 1,
+          "co_changes": {
+            "auth::authenticate": 5
+          },
+          "coverage": 0.90
+        },
+        {
+          "kind": "method",
+          "name": "constructor",
+          "exported": false,
+          "visibility": "public",
+          "async": false,
+          "start_line": 3,
+          "end_line": 8,
+          "lines": 6,
+          "params": 2,
+          "depth": 4,
+          "git_churn_30d": 0,
+          "co_changes": {},
+          "coverage": 1.0
+        },
+        {
+          "kind": "class",
+          "name": "TokenExpiredError",
+          "exported": true,
+          "start_line": 14,
+          "end_line": 20,
+          "lines": 7,
+          "depth": 2,
+          "git_churn_30d": 1,
+          "co_changes": {},
+          "coverage": 0.85
+        },
+        {
+          "kind": "class",
+          "name": "PermissionError",
+          "exported": true,
+          "start_line": 22,
+          "end_line": 28,
+          "lines": 7,
+          "depth": 2,
+          "git_churn_30d": 0,
+          "co_changes": {},
+          "coverage": 0.0
+        }
+      ],
+      "imports": [],
+      "git_churn_30d": 1
+    }
+  ],
+  "edges": [
+    { "from_file": "auth", "to_file": "crypto", "symbol": "hashPassword", "type": "import" },
+    { "from_file": "auth", "to_file": "crypto", "symbol": "verifyPassword", "type": "import" },
+    { "from_file": "auth", "to_file": "repository", "symbol": "UserRepository", "type": "import" },
+    { "from_file": "auth", "to_file": "token", "symbol": "generateToken", "type": "import" },
+    { "from_file": "auth", "to_file": "token", "symbol": "validateToken", "type": "import" }
+  ]
+}
