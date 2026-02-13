@@ -6,33 +6,17 @@
   No classify. Domain assignment is handled by classify.lua.
 ]]
 
-local cjson = require("cjson")
-local cjson_null = cjson.null
+local std      = require("codedash.std")
 local node_mod = require("codedash.model.node")
 
 local M = {}
-
---- Recursively convert cjson.null → nil
-local function sanitize_null(v)
-  if v == cjson_null then return nil end
-  if type(v) == "table" then
-    local clean = {}
-    for k, val in pairs(v) do
-      clean[k] = sanitize_null(val)
-    end
-    return clean
-  end
-  return v
-end
 
 --- Load and parse a JSON file
 ---@param path string
 ---@return table
 function M.load_json(path)
-  local f = assert(io.open(path, "r"))
-  local content = f:read("*a")
-  f:close()
-  return sanitize_null(cjson.decode(content))
+  local content = std.fs.read_file(path)
+  return std.json.decode(content)
 end
 
 --- Estimate cyclomatic complexity from raw AST data.

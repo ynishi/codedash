@@ -1,0 +1,25 @@
+{
+  "_doc": "Rust-Lua stdlib contract. Prototype: Lua shims. Production: mlua injection.",
+
+  "json": {
+    "decode": {
+      "sig": "(string) -> table",
+      "note": "Prototype: lua-cjson. Production: serde_json via mlua."
+    },
+    "encode": {
+      "sig": "(table) -> string",
+      "note": "Optional. Needed for export/serialization."
+    }
+  },
+
+  "fs": {
+    "read_file": {
+      "sig": "(path: string) -> string",
+      "note": "Prototype: io.open+read. Production: std::fs::read_to_string via mlua."
+    },
+    "file_exists": {
+      "sig": "(path: string) -> boolean",
+      "note": "Optional. Useful for config resolution."
+    }
+  }
+}

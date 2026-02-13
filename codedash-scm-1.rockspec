@@ -44,6 +44,7 @@ build = {
     ["codedash.eval.settings"]                = "codedash/eval/settings.lua",
 
     -- Lib
+    ["codedash.std"]                           = "codedash/std.lua",
     ["codedash.lib.range"]                    = "codedash/lib/range.lua",
 
     -- Presets
