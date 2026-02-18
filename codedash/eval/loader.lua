@@ -24,7 +24,8 @@ end
 --- If the input JSON provides a `cyclomatic` field, it is used as-is instead.
 local function estimate_cyclomatic(raw)
   if raw.cyclomatic then return raw.cyclomatic end
-  if raw.kind == "interface" or raw.kind == "type_alias" then
+  if raw.kind == "interface" or raw.kind == "type_alias"
+      or raw.kind == "struct" or raw.kind == "enum" or raw.kind == "trait" then
     return 1
   end
   local lines = raw.lines or 1
@@ -53,6 +54,7 @@ function M.to_nodes(ast_data)
     for _, raw in ipairs(file.nodes) do
       local raw_depth = raw.depth or 0
       local is_container = raw.kind == "class" or raw.kind == "interface"
+                       or raw.kind == "impl" or raw.kind == "trait"
 
       if is_container then
         current_parent = raw.name

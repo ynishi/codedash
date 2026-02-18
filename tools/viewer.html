@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>codedash viewer</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #21262d;
+  --fg: #c9d1d9;
+  --fg2: #8b949e;
+  --border: #30363d;
+  --accent: #58a6ff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.5;
+}
+
+/* ── Drop zone ── */
+#drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+}
+#drop-zone.hidden { display: none; }
+.drop-area {
+  width: 480px;
+  height: 200px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.drop-area:hover, .drop-area.dragover {
+  border-color: var(--accent);
+}
+.drop-area p { color: var(--fg2); }
+.drop-area input { display: none; }
+
+/* ── Main layout ── */
+#app { display: none; padding: 20px 24px; }
+#app.visible { display: block; }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 18px; font-weight: 600; }
+.stats { display: flex; gap: 20px; font-size: 13px; color: var(--fg2); }
+.stats .val { color: var(--fg); font-weight: 600; }
+
+/* ── Controls ── */
+.controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.controls select, .controls input {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.controls input { width: 220px; }
+.controls label { font-size: 13px; color: var(--fg2); margin-right: 4px; }
+.btn {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* ── Treemap ── */
+#treemap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-content: flex-start;
+  margin-bottom: 24px;
+}
+.tnode {
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: outline 0.15s;
+  display: flex;
+  align-items: flex-start;
+  line-height: 1.3;
+  min-width: 32px;
+  min-height: 24px;
+  position: relative;
+}
+.tnode:hover { outline: 2px solid #fff; z-index: 1; }
+.tnode .label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  font-weight: 500;
+}
+
+/* ── Table ── */
+#table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  padding: 8px 10px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+th:hover { color: var(--accent); }
+th .arrow { margin-left: 4px; font-size: 10px; }
+td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tr:hover td { background: var(--bg2); }
+.kind-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.metric-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.heatbar {
+  display: inline-block;
+  height: 14px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+  min-width: 4px;
+}
+
+/* ── Tooltip ── */
+#tooltip {
+  display: none;
+  position: fixed;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  max-width: 360px;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+#tooltip.show { display: block; }
+#tooltip h3 { font-size: 14px; margin-bottom: 6px; }
+#tooltip .row { display: flex; justify-content: space-between; gap: 16px; }
+#tooltip .lbl { color: var(--fg2); }
+
+/* ── View toggle ── */
+.view-toggle { display: flex; gap: 0; }
+.view-toggle .btn { border-radius: 0; }
+.view-toggle .btn:first-child { border-radius: 6px 0 0 6px; }
+.view-toggle .btn:last-child { border-radius: 0 6px 6px 0; }
+
+/* ── Legend ── */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg2);
+  margin-bottom: 16px;
+}
+.legend-gradient {
+  width: 120px;
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(to right, hsl(240,70%,50%), hsl(180,70%,50%), hsl(120,70%,50%), hsl(60,70%,50%), hsl(0,70%,50%));
+}
+</style>
+</head>
+<body>
+
+<div id="drop-zone">
+  <div class="drop-area" id="drop-area">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="1.5">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+    </svg>
+    <p>enriched.json or ast_data.json をドロップ</p>
+    <p style="font-size:12px">またはクリックして選択</p>
+    <input type="file" id="file-input" accept=".json">
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <h1 id="title">codedash viewer</h1>
+    <div class="stats">
+      <span><span class="val" id="s-files">0</span> files</span>
+      <span><span class="val" id="s-nodes">0</span> nodes</span>
+      <span><span class="val" id="s-edges">0</span> edges</span>
+    </div>
+  </header>
+
+  <div class="controls">
+    <label>Color</label>
+    <select id="color-metric">
+      <option value="cyclomatic">cyclomatic</option>
+      <option value="git_churn_30d">churn</option>
+      <option value="lines">lines</option>
+      <option value="params">params</option>
+      <option value="depth">depth</option>
+    </select>
+
+    <label>Size</label>
+    <select id="size-metric">
+      <option value="lines">lines</option>
+      <option value="cyclomatic">cyclomatic</option>
+      <option value="params">params</option>
+      <option value="git_churn_30d">churn</option>
+    </select>
+
+    <label>Kind</label>
+    <select id="kind-filter">
+      <option value="all">all</option>
+    </select>
+
+    <input id="search" type="text" placeholder="Search name...">
+
+    <div class="view-toggle">
+      <button class="btn active" data-view="treemap">Map</button>
+      <button class="btn" data-view="table">Table</button>
+    </div>
+
+    <button class="btn" id="reload-btn">Load another</button>
+  </div>
+
+  <div class="legend">
+    <span>Low</span>
+    <div class="legend-gradient"></div>
+    <span>High</span>
+    <span style="margin-left:8px" id="legend-label">(cyclomatic)</span>
+  </div>
+
+  <div id="treemap"></div>
+  <div id="table-wrap" style="display:none">
+    <table>
+      <thead><tr id="thead-row"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let DATA = null;
+let ALL_NODES = [];
+let currentView = 'treemap';
+let sortCol = 'cyclomatic';
+let sortAsc = false;
+
+// ============================================================
+// File loading
+// ============================================================
+const dropZone = document.getElementById('drop-zone');
+const dropArea = document.getElementById('drop-area');
+const fileInput = document.getElementById('file-input');
+const app = document.getElementById('app');
+
+dropArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+dropArea.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropArea.classList.add('dragover');
+});
+dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
+dropArea.addEventListener('drop', e => {
+  e.preventDefault();
+  dropArea.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+document.getElementById('reload-btn').addEventListener('click', () => {
+  app.classList.remove('visible');
+  dropZone.classList.remove('hidden');
+  fileInput.value = '';
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      DATA = JSON.parse(e.target.result);
+      processData();
+      dropZone.classList.add('hidden');
+      app.classList.add('visible');
+      render();
+    } catch (err) {
+      alert('JSON parse error: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ============================================================
+// Data processing
+// ============================================================
+function processData() {
+  ALL_NODES = [];
+  for (const file of DATA.files) {
+    for (const node of file.nodes) {
+      ALL_NODES.push({
+        file: file.name,
+        name: node.name,
+        kind: node.kind,
+        lines: node.lines || 1,
+        start_line: node.start_line || 0,
+        end_line: node.end_line || 0,
+        params: node.params || 0,
+        depth: node.depth || 0,
+        cyclomatic: node.cyclomatic || 1,
+        field_count: node.field_count || 0,
+        exported: !!node.exported,
+        visibility: node.visibility || 'private',
+        git_churn_30d: node.git_churn_30d || 0,
+        coverage: node.coverage,
+        calls: node.calls || [],
+      });
+    }
+  }
+
+  // Populate kind filter
+  const kinds = [...new Set(ALL_NODES.map(n => n.kind))].sort();
+  const kindFilter = document.getElementById('kind-filter');
+  kindFilter.innerHTML = '<option value="all">all</option>';
+  for (const k of kinds) {
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = k;
+    kindFilter.appendChild(opt);
+  }
+
+  // Stats
+  document.getElementById('s-files').textContent = DATA.files.length;
+  document.getElementById('s-nodes').textContent = ALL_NODES.length;
+  document.getElementById('s-edges').textContent = (DATA.edges || []).length;
+}
+
+// ============================================================
+// Filtering
+// ============================================================
+function getFiltered() {
+  const kind = document.getElementById('kind-filter').value;
+  const search = document.getElementById('search').value.toLowerCase();
+  return ALL_NODES.filter(n => {
+    if (kind !== 'all' && n.kind !== kind) return false;
+    if (search && !n.name.toLowerCase().includes(search) && !n.file.toLowerCase().includes(search)) return false;
+    return true;
+  });
+}
+
+// ============================================================
+// Color / Size mapping (codedash percept model)
+// ============================================================
+function getMetricRange(nodes, metric) {
+  const vals = nodes.map(n => n[metric] || 0).filter(v => v > 0);
+  if (vals.length === 0) return { min: 0, max: 1 };
+  vals.sort((a, b) => a - b);
+  // p10 / p90 for normalization (matches codedash percentile normalizer)
+  const p10 = vals[Math.floor(vals.length * 0.1)] || vals[0];
+  const p90 = vals[Math.floor(vals.length * 0.9)] || vals[vals.length - 1];
+  return { min: p10, max: Math.max(p90, p10 + 1) };
+}
+
+function normalize(val, range) {
+  if (range.max === range.min) return 0.5;
+  return Math.max(0, Math.min(1, (val - range.min) / (range.max - range.min)));
+}
+
+// hue: 240(blue=low) → 0(red=high) — matches codedash hue percept
+function metricToHue(normalized) {
+  return 240 - normalized * 240;
+}
+
+function metricToColor(normalized) {
+  const hue = metricToHue(normalized);
+  return `hsl(${hue}, 70%, 45%)`;
+}
+
+function metricToSize(normalized) {
+  // area proportional: min 36px, max 200px side
+  return 36 + normalized * 164;
+}
+
+// ============================================================
+// Kind colors
+// ============================================================
+const KIND_COLORS = {
+  function: '#58a6ff', method: '#7ee787', struct: '#d2a8ff',
+  enum: '#f0883e', trait: '#f778ba', impl: '#8b949e',
+  class: '#d2a8ff', interface: '#f778ba', component: '#7ee787',
+  hook: '#79c0ff', type_alias: '#d2a8ff', const: '#ffa657',
+  static: '#ffa657', variable: '#c9d1d9', module: '#8b949e',
+  macro: '#ff7b72', store: '#ffa657', context: '#79c0ff',
+};
+
+function kindColor(kind) {
+  return KIND_COLORS[kind] || '#8b949e';
+}
+
+// ============================================================
+// Treemap view
+// ============================================================
+function renderTreemap() {
+  const container = document.getElementById('treemap');
+  container.innerHTML = '';
+  const nodes = getFiltered();
+  const colorMetric = document.getElementById('color-metric').value;
+  const sizeMetric = document.getElementById('size-metric').value;
+  const colorRange = getMetricRange(nodes, colorMetric);
+  const sizeRange = getMetricRange(nodes, sizeMetric);
+
+  // Sort by size metric descending for visual hierarchy
+  const sorted = [...nodes].sort((a, b) => (b[sizeMetric] || 0) - (a[sizeMetric] || 0));
+
+  for (const node of sorted) {
+    const colorNorm = normalize(node[colorMetric] || 0, colorRange);
+    const sizeNorm = normalize(node[sizeMetric] || 0, sizeRange);
+    const side = metricToSize(sizeNorm);
+    const bg = metricToColor(colorNorm);
+
+    const el = document.createElement('div');
+    el.className = 'tnode';
+    el.style.width = side + 'px';
+    el.style.height = Math.max(24, side * 0.6) + 'px';
+    el.style.background = bg;
+
+    // Border thickness from params (codedash border percept)
+    const borderW = 1 + Math.min(node.params, 6);
+    el.style.border = `${borderW}px solid ${adjustBrightness(bg, -20)}`;
+
+    // Opacity from depth (codedash opacity percept: deep = faded)
+    const depthOpacity = Math.max(0.4, 1 - node.depth * 0.08);
+    el.style.opacity = depthOpacity;
+
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = node.name;
+    el.appendChild(label);
+
+    el.addEventListener('mouseenter', e => showTooltip(e, node));
+    el.addEventListener('mouseleave', hideTooltip);
+    el.addEventListener('mousemove', moveTooltip);
+
+    container.appendChild(el);
+  }
+}
+
+function adjustBrightness(hslStr, amount) {
+  const match = hslStr.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (!match) return hslStr;
+  const l = Math.max(0, Math.min(100, parseInt(match[3]) + amount));
+  return `hsl(${match[1]}, ${match[2]}%, ${l}%)`;
+}
+
+// ============================================================
+// Table view
+// ============================================================
+const COLUMNS = [
+  { key: 'file', label: 'File', numeric: false },
+  { key: 'name', label: 'Name', numeric: false },
+  { key: 'kind', label: 'Kind', numeric: false },
+  { key: 'lines', label: 'Lines', numeric: true },
+  { key: 'params', label: 'Params', numeric: true },
+  { key: 'cyclomatic', label: 'Cyclo', numeric: true },
+  { key: 'depth', label: 'Depth', numeric: true },
+  { key: 'field_count', label: 'Fields', numeric: true },
+  { key: 'git_churn_30d', label: 'Churn', numeric: true },
+  { key: 'visibility', label: 'Vis', numeric: false },
+];
+
+function renderTable() {
+  // Header
+  const thead = document.getElementById('thead-row');
+  thead.innerHTML = '';
+  for (const col of COLUMNS) {
+    const th = document.createElement('th');
+    th.textContent = col.label;
+    if (sortCol === col.key) {
+      const arrow = document.createElement('span');
+      arrow.className = 'arrow';
+      arrow.textContent = sortAsc ? '\u25B2' : '\u25BC';
+      th.appendChild(arrow);
+    }
+    th.addEventListener('click', () => {
+      if (sortCol === col.key) sortAsc = !sortAsc;
+      else { sortCol = col.key; sortAsc = col.numeric ? false : true; }
+      renderTable();
+    });
+    thead.appendChild(th);
+  }
+
+  // Body
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  let nodes = getFiltered();
+
+  // Sort
+  nodes.sort((a, b) => {
+    const va = a[sortCol], vb = b[sortCol];
+    if (typeof va === 'number' && typeof vb === 'number') {
+      return sortAsc ? va - vb : vb - va;
+    }
+    const sa = String(va || ''), sb = String(vb || '');
+    return sortAsc ? sa.localeCompare(sb) : sb.localeCompare(sa);
+  });
+
+  const colorMetric = document.getElementById('color-metric').value;
+  const colorRange = getMetricRange(nodes, colorMetric);
+
+  for (const node of nodes) {
+    const tr = document.createElement('tr');
+    for (const col of COLUMNS) {
+      const td = document.createElement('td');
+      if (col.key === 'kind') {
+        const badge = document.createElement('span');
+        badge.className = 'kind-badge';
+        badge.style.background = kindColor(node.kind) + '22';
+        badge.style.color = kindColor(node.kind);
+        badge.textContent = node.kind;
+        td.appendChild(badge);
+      } else if (col.numeric) {
+        td.className = 'metric-cell';
+        const val = node[col.key] || 0;
+        if (col.key === colorMetric && val > 0) {
+          const norm = normalize(val, colorRange);
+          const bar = document.createElement('span');
+          bar.className = 'heatbar';
+          bar.style.width = (4 + norm * 40) + 'px';
+          bar.style.background = metricToColor(norm);
+          td.appendChild(bar);
+        }
+        td.appendChild(document.createTextNode(val));
+      } else {
+        td.textContent = node[col.key] || '';
+      }
+      tr.appendChild(td);
+    }
+    tr.addEventListener('mouseenter', e => showTooltip(e, node));
+    tr.addEventListener('mouseleave', hideTooltip);
+    tbody.appendChild(tr);
+  }
+}
+
+// ============================================================
+// Tooltip
+// ============================================================
+function showTooltip(e, node) {
+  const tip = document.getElementById('tooltip');
+  const rows = [
+    ['File', node.file],
+    ['Kind', node.kind],
+    ['Lines', `${node.start_line}-${node.end_line} (${node.lines})`],
+    ['Params', node.params],
+    ['Cyclomatic', node.cyclomatic],
+    ['Depth', node.depth],
+    ['Fields', node.field_count],
+    ['Churn (30d)', node.git_churn_30d],
+    ['Visibility', node.visibility],
+    ['Coverage', node.coverage != null ? (node.coverage * 100).toFixed(0) + '%' : 'n/a'],
+  ];
+  if (node.calls && node.calls.length > 0) {
+    rows.push(['Calls', node.calls.map(c => c.symbol).join(', ')]);
+  }
+
+  tip.textContent = '';
+  const h3 = document.createElement('h3');
+  h3.textContent = node.name;
+  tip.appendChild(h3);
+  for (const [l, v] of rows) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const lbl = document.createElement('span');
+    lbl.className = 'lbl';
+    lbl.textContent = l;
+    const val = document.createElement('span');
+    val.textContent = v;
+    row.appendChild(lbl);
+    row.appendChild(val);
+    tip.appendChild(row);
+  }
+  tip.classList.add('show');
+  moveTooltip(e);
+}
+
+function moveTooltip(e) {
+  const tip = document.getElementById('tooltip');
+  const x = Math.min(e.clientX + 12, window.innerWidth - 380);
+  const y = Math.min(e.clientY + 12, window.innerHeight - 300);
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').classList.remove('show');
+}
+
+// ============================================================
+// Render dispatch
+// ============================================================
+function render() {
+  document.getElementById('legend-label').textContent =
+    '(' + document.getElementById('color-metric').value + ')';
+  if (currentView === 'treemap') {
+    document.getElementById('treemap').style.display = 'flex';
+    document.getElementById('table-wrap').style.display = 'none';
+    renderTreemap();
+  } else {
+    document.getElementById('treemap').style.display = 'none';
+    document.getElementById('table-wrap').style.display = 'block';
+    renderTable();
+  }
+}
+
+// ============================================================
+// Event bindings
+// ============================================================
+document.getElementById('color-metric').addEventListener('change', render);
+document.getElementById('size-metric').addEventListener('change', render);
+document.getElementById('kind-filter').addEventListener('change', render);
+document.getElementById('search').addEventListener('input', render);
+
+document.querySelectorAll('.view-toggle .btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.view-toggle .btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    render();
+  });
+});
+</script>
+</body>
+</html>

@@ -58,8 +58,8 @@ const gitGlobs = srcGlobs.map(g => `'${g}'`).join(" ");
 // ============================================================
 function normalizePath(filePath) {
   let clean = filePath.trim();
-  // Remove .ts/.tsx extension
-  clean = clean.replace(/\.(tsx?)$/, "");
+  // Remove source file extensions (.ts/.tsx/.rs)
+  clean = clean.replace(/\.(tsx?|rs)$/, "");
   // git log may output paths relative to repo root with subdir prefix
   // e.g., "orcs-desktop/src/foo.ts" when repo has subdir structure
   // Try to find and strip the configured prefix anywhere in the path
@@ -182,20 +182,19 @@ for (const file of data.files) {
 }
 
 // co-changeをファイル代表ノード間で注入
+const callableKinds = new Set(["function", "component", "hook", "method", "store", "context", "macro"]);
+function getRepresentatives(fileName) {
+  const file = data.files.find(f => f.name === fileName);
+  if (!file) return [];
+  const callables = file.nodes.filter(n => callableKinds.has(n.kind));
+  const exported = callables.filter(n => n.exported);
+  return exported.length > 0 ? exported : callables.slice(0, 3);
+}
+
 for (const [key, count] of Object.entries(coChangePairs)) {
   if (count < minCc) continue;
 
   const [fileA, fileB] = key.split("|");
-
-  function getRepresentatives(fileName) {
-    const file = data.files.find(f => f.name === fileName);
-    if (!file) return [];
-    const callableKinds = new Set(["function", "component", "hook", "method", "store", "context"]);
-    const callables = file.nodes.filter(n => callableKinds.has(n.kind));
-    const exported = callables.filter(n => n.exported);
-    return exported.length > 0 ? exported : callables.slice(0, 3);
-  }
-
   const repsA = getRepresentatives(fileA);
   const repsB = getRepresentatives(fileB);
 
