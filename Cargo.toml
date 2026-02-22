@@ -1,0 +1,36 @@
+[package]
+name = "codedash"
+version = "0.1.0"
+edition = "2021"
+description = "Code metrics visualization — single binary"
+license = "MIT"
+repository = "https://github.com/ynishi/codedash"
+
+[[bin]]
+name = "codedash"
+path = "src/main.rs"
+
+[lib]
+name = "codedash_lib"
+path = "src/lib.rs"
+
+[dependencies]
+# Lua runtime + CLI framework
+senl = "0.4"
+
+# AST parsing
+tree-sitter = "0.25"
+tree-sitter-rust = "0.24"
+
+# Git enrichment
+git2 = { version = "0.20", features = ["vendored-libgit2"] }
+
+# Lua runtime (direct dependency for rustlib.rs)
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
