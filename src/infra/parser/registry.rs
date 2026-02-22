@@ -12,6 +12,7 @@ impl ParserRegistry {
             parsers: Vec::new(),
         };
         reg.register(Box::new(super::rust::RustParser::new()));
+        reg.register(Box::new(super::typescript::TypeScriptParser::new()));
         reg
     }
 
