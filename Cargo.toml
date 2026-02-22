@@ -2,16 +2,32 @@
 name = "codedash"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.80"
 description = "Code metrics visualization — single binary"
 license = "MIT"
 repository = "https://github.com/ynishi/codedash"
+readme = "README.md"
+keywords = ["code-metrics", "visualization", "ast", "analysis"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [
+    ".busted",
+    "cli.lua",
+    "paths.lua",
+    "rustlib.json",
+    "codedash/",
+    "codedash-*.rockspec",
+    "examples/",
+    "spec/",
+    "tools/",
+    "*.png",
+]
 
 [[bin]]
 name = "codedash"
 path = "src/main.rs"
 
 [lib]
-name = "codedash_lib"
+name = "codedash"
 path = "src/lib.rs"
 
 [dependencies]
