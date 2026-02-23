@@ -14,7 +14,6 @@ exclude = [
     "cli.lua",
     "paths.lua",
     "rustlib.json",
-    "codedash/",
     "codedash-*.rockspec",
     "examples/",
     "spec/",
