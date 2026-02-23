@@ -7,11 +7,19 @@
 
 local M = {}
 
---- Escape a literal string for Lua pattern matching.
+--- Prepare a domain pattern for Lua pattern matching.
+--- Preserves leading ^ as anchor; escapes special chars in the rest.
 ---@param s string
 ---@return string
 local function escape_pattern(s)
-  return s:gsub("%%", "%%%%"):gsub("([%.%-%+%[%]%(%)%$%^])", "%%%1")
+  local anchor = ""
+  local body = s
+  if s:sub(1, 1) == "^" then
+    anchor = "^"
+    body = s:sub(2)
+  end
+  body = body:gsub("%%", "%%%%"):gsub("([%.%-%+%[%]%(%)%$%^])", "%%%1")
+  return anchor .. body
 end
 
 --- Test if a pattern matches any of the node's identifiers

@@ -163,6 +163,7 @@ function M.resolve(user_config)
   return {
     bindings = bindings,
     domains  = user_config.domains or {},
+    layers   = user_config.layers or {},
     exclude  = user_config.exclude or {},
     fallback = user_config.fallback or "unknown",
   }

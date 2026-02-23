@@ -5,7 +5,7 @@
   5 bindings, within human perceptual limits.
 
   Perception model:
-    high complexity -> red      (hue)
+    high complexity -> red, low -> green  (hue)
     many lines      -> large    (size)
     many params     -> thick    (border)
     deep nesting    -> faded    (opacity)

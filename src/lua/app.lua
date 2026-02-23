@@ -307,8 +307,45 @@ app:route("list-parsers", function()
 end)
 
 -- ================================================================
--- Config-init route
+-- Config-init route (auto-detects Cargo workspace)
 -- ================================================================
+
+--- Parse Cargo.toml workspace members with layer comments.
+--- Returns list of { name=string, path=string, layer=string|nil }
+local function detect_workspace_members()
+  if not __rustlib.fs.file_exists("Cargo.toml") then return {} end
+  local content = __rustlib.fs.read_file("Cargo.toml")
+
+  -- Find [workspace] members section
+  local members_block = content:match("%[workspace%].-members%s*=%s*%[(.-)%]")
+  if not members_block then return {} end
+
+  local members = {}
+  local pending_layer = nil
+  for line in members_block:gmatch("[^\n]+") do
+    -- Check for layer comment: # Layer Name
+    local layer_comment = line:match("^%s*#%s*(.+)$")
+    if layer_comment then
+      -- Strip trailing "Layer" and whitespace
+      pending_layer = layer_comment:match("^(.-)%s*[Ll]ayer%s*%(.*%)%s*$")
+        or layer_comment:match("^(.-)%s*[Ll]ayer%s*$")
+        or layer_comment:gsub("%s+$", "")
+    end
+
+    -- Check for member path: "crates/foo",
+    local member_path = line:match('"([^"]+)"')
+    if member_path then
+      local name = member_path:match("([^/]+)$")
+      members[#members + 1] = {
+        name = name,
+        path = member_path,
+        layer = pending_layer,
+      }
+    end
+  end
+  return members
+end
+
 app:route("config-init", function()
   local path = ".codedash.lua"
 
@@ -316,40 +353,82 @@ app:route("config-init", function()
     return sen.err(".codedash.lua already exists in current directory")
   end
 
-  local template = [=[
---[[
-  .codedash.lua — Project configuration for codedash
+  local members = detect_workspace_members()
 
-  extends: inherit bindings from a preset ("recommended")
-  bindings: override or add percept bindings
-  domains: group nodes by file path patterns
-]]
+  local lines = {}
+  lines[#lines+1] = '--[['
+  lines[#lines+1] = '  .codedash.lua — Project configuration for codedash'
+  lines[#lines+1] = ''
+  lines[#lines+1] = '  extends: inherit bindings from a preset ("recommended")'
+  lines[#lines+1] = '  domains: group nodes by file path patterns (vertical slice)'
+  lines[#lines+1] = '  layers: group domains by architectural role (horizontal slice)'
+  lines[#lines+1] = ']]'
+  lines[#lines+1] = ''
+  lines[#lines+1] = 'return {'
+  lines[#lines+1] = '  extends = "recommended",'
 
--- Start from the recommended preset
--- Override individual bindings as needed
-return {
-  extends = "recommended",
+  if #members > 0 then
+    -- Domains: each crate = one domain
+    lines[#lines+1] = ''
+    lines[#lines+1] = '  -- Auto-detected from Cargo.toml workspace'
+    lines[#lines+1] = '  domains = {'
+    for _, m in ipairs(members) do
+      lines[#lines+1] = string.format('    { name = "%s", patterns = { "^%s/" } },', m.name, m.path)
+    end
+    lines[#lines+1] = '  },'
 
-  -- Example: custom bindings (uncomment to override)
-  -- local bind  = require("codedash.model.binding")
-  -- local idx   = require("codedash.presets.indexes")
-  -- local pct   = require("codedash.presets.percepts")
-  -- bindings = {
-  --   bind { idx.complexity, pct.hue },
-  -- },
+    -- Layers: group domains by Cargo.toml comments
+    local layer_map = {}
+    local layer_order = {}
+    for _, m in ipairs(members) do
+      local layer = m.layer
+      if layer then
+        if not layer_map[layer] then
+          layer_map[layer] = {}
+          layer_order[#layer_order + 1] = layer
+        end
+        layer_map[layer][#layer_map[layer] + 1] = m.name
+      end
+    end
 
-  -- Example: domain classification (uncomment to enable)
-  -- domains = {
-  --   { name = "core",  patterns = { "^src/core/", "^src/domain/" } },
-  --   { name = "infra", patterns = { "^src/infra/", "^src/db/" } },
-  --   { name = "api",   patterns = { "^src/api/", "^src/routes/" } },
-  -- },
-  -- exclude = { "^test", "^spec" },
-  -- fallback = "other",
-}
-]=]
+    if #layer_order > 0 then
+      lines[#lines+1] = ''
+      lines[#lines+1] = '  -- Layers: group domains by architectural role'
+      lines[#lines+1] = '  layers = {'
+      for _, layer in ipairs(layer_order) do
+        local doms = layer_map[layer]
+        local quoted = {}
+        for _, d in ipairs(doms) do
+          quoted[#quoted + 1] = string.format('"%s"', d)
+        end
+        lines[#lines+1] = string.format('    { name = "%s", domains = { %s } },',
+          layer, table.concat(quoted, ", "))
+      end
+      lines[#lines+1] = '  },'
+    end
 
-  -- Write file
+    lines[#lines+1] = '  fallback = "other",'
+  else
+    lines[#lines+1] = ''
+    lines[#lines+1] = '  -- Example: domain classification (uncomment to enable)'
+    lines[#lines+1] = '  -- domains = {'
+    lines[#lines+1] = '  --   { name = "core",  patterns = { "^src/core/", "^src/domain/" } },'
+    lines[#lines+1] = '  --   { name = "infra", patterns = { "^src/infra/", "^src/db/" } },'
+    lines[#lines+1] = '  --   { name = "api",   patterns = { "^src/api/", "^src/routes/" } },'
+    lines[#lines+1] = '  -- },'
+    lines[#lines+1] = '  -- layers = {'
+    lines[#lines+1] = '  --   { name = "Core",  domains = { "core" } },'
+    lines[#lines+1] = '  --   { name = "Infra", domains = { "infra" } },'
+    lines[#lines+1] = '  --   { name = "API",   domains = { "api" } },'
+    lines[#lines+1] = '  -- },'
+    lines[#lines+1] = '  -- fallback = "other",'
+  end
+
+  lines[#lines+1] = '}'
+  lines[#lines+1] = ''
+
+  local template = table.concat(lines, "\n")
+
   local f, err = io.open(path, "w")
   if not f then
     return sen.err(string.format("Failed to write %s: %s", path, err))
@@ -357,7 +436,11 @@ return {
   f:write(template)
   f:close()
 
-  return sen.ok("Created .codedash.lua")
+  local msg = "Created .codedash.lua"
+  if #members > 0 then
+    msg = msg .. string.format(" (detected %d workspace members)", #members)
+  end
+  return sen.ok(msg)
 end)
 
 -- ================================================================
@@ -410,7 +493,7 @@ app:route("view", function(ctx)
 
   -- Step 4: Build view data (aggregate by module + edges)
   local view = require("codedash.view")
-  local data_json = view.build_data(r, ast_data.edges or {}, resolved.bindings)
+  local data_json = view.build_data(r, ast_data.edges or {}, resolved.bindings, domain_map, resolved.layers)
 
   -- Step 5: Generate HTML and write to file
   local html = view.generate_html(data_json)

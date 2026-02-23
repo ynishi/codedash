@@ -6,43 +6,69 @@
 
   Visual encoding:
     circle size   = total lines of code in module
-    circle color  = architectural layer (app/domain/infra/port/cli)
-    border ring   = complexity hue (green=low → red=high)
+    circle color  = domain (project area / crate)
+    border ring   = complexity hue (blue=low → red=high)
     ring width    = max cyclomatic complexity
     edges         = import dependencies
+
+  Data model:
+    domain = vertical slice (project area, crate, feature zone)
+    layer  = horizontal slice (architectural role: SDK, Runtime, etc.)
 ]]
 
 local M = {}
 
-local LAYER_META = {
-  app    = { color = "#58a6ff", label = "Application" },
-  domain = { color = "#7ee787", label = "Domain" },
-  infra  = { color = "#f0883e", label = "Infrastructure" },
-  port   = { color = "#d2a8ff", label = "Port" },
-  cli    = { color = "#79c0ff", label = "CLI" },
+-- Palette for auto-assigned domains (distinct, dark-theme friendly)
+local PALETTE = {
+  "#58a6ff", "#7ee787", "#f0883e", "#d2a8ff", "#79c0ff",
+  "#f778ba", "#ffa657", "#56d4dd", "#d4976c", "#a5d6ff",
+  "#bbeaa6", "#e2c08d", "#b694d8", "#ff9b8e", "#8bd5ca",
 }
-
-local function detect_group(path)
-  local first = path:match("^([^/]+)")
-  if first and LAYER_META[first] then return first end
-  return "other"
-end
 
 local function strip_src(p)
   return p:match("^src/(.+)") or p
 end
 
 --- Build combined JSON data for the view from eval result + edges.
-function M.build_data(eval_result, ast_edges, bindings)
+--- @param eval_result table  Lua eval result with entries/groups
+--- @param ast_edges table    Raw edges from AST
+--- @param bindings table     Resolved bindings
+--- @param domain_map table   Optional: node_name → domain_name mapping
+--- @param layers_config table Optional: layers from config ({ name, domains })
+function M.build_data(eval_result, ast_edges, bindings, domain_map, layers_config)
+  domain_map = domain_map or {}
+  layers_config = layers_config or {}
+
+  -- Build file → domain lookup (domain_map keys are node.name = "file_name::symbol")
+  local file_domain = {}
+  for node_name, dom in pairs(domain_map) do
+    if dom ~= "_excluded" then
+      local file_part = node_name:match("^(.+)::") or node_name
+      if not file_domain[file_part] then
+        file_domain[file_part] = dom
+      end
+    end
+  end
+
+  -- Build stripped path → domain lookup (for edge endpoint resolution)
+  local stripped_domain = {}
+  for file, dom in pairs(file_domain) do
+    local stripped = strip_src(file)
+    if not stripped_domain[stripped] then
+      stripped_domain[stripped] = dom
+    end
+  end
+
   -- 1. Aggregate entries by file
   local file_map = {}
   for _, entry in ipairs(eval_result.entries) do
     local n = entry.node
     local file = strip_src(n.file)
+    local domain = file_domain[n.file] or "unknown"
     if not file_map[file] then
       file_map[file] = {
         id = file,
-        group = detect_group(file),
+        domain = domain,
         lines = 0,
         entries = 0,
         max_cyclo = 0,
@@ -97,23 +123,33 @@ function M.build_data(eval_result, ast_edges, bindings)
       if not node_ids[id] then
         node_ids[id] = true
         nodes[#nodes + 1] = {
-          id = id, group = detect_group(id),
+          id = id, domain = stripped_domain[id] or "unknown",
           lines = 0, entries = 0, max_cyclo = 0, avg_hue = 120,
         }
       end
     end
   end
 
-  -- 4. Build groups
-  local group_set = {}
-  for _, n in ipairs(nodes) do group_set[n.group] = true end
-  local groups = {}
-  for g in pairs(group_set) do
-    local meta = LAYER_META[g] or { color = "#8b949e", label = g }
-    groups[#groups + 1] = { name = g, color = meta.color, label = meta.label }
+  -- 4. Build domain list with auto-assigned colors (sorted for determinism)
+  local domain_set = {}
+  for _, n in ipairs(nodes) do domain_set[n.domain] = true end
+  local sorted_doms = {}
+  for d in pairs(domain_set) do sorted_doms[#sorted_doms + 1] = d end
+  table.sort(sorted_doms)
+  local domains = {}
+  for i, d in ipairs(sorted_doms) do
+    local c = PALETTE[((i - 1) % #PALETTE) + 1]
+    local label = d:sub(1,1):upper() .. d:sub(2)
+    domains[#domains + 1] = { name = d, color = c, label = label }
   end
 
-  -- 5. Bindings info
+  -- 5. Layers (pass through from config)
+  local layers = {}
+  for _, l in ipairs(layers_config) do
+    layers[#layers + 1] = { name = l.name, domains = l.domains }
+  end
+
+  -- 6. Bindings info
   local binding_info = {}
   for _, b in ipairs(bindings) do
     binding_info[#binding_info + 1] = { index = b.index.name, percept = b.percept.name }
@@ -122,7 +158,8 @@ function M.build_data(eval_result, ast_edges, bindings)
   return __rustlib.json.encode({
     nodes = nodes,
     edges = edges,
-    groups = groups,
+    domains = domains,
+    layers = layers,
     bindings = binding_info,
     total = eval_result.total,
   })
@@ -152,11 +189,12 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
 .chip{display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:2px 10px;font-size:11px;color:var(--fg2);margin-left:4px}
 .chip .p{color:var(--accent);font-weight:600}
 svg{position:fixed;top:48px;left:0;right:0;bottom:0;width:100%;height:calc(100vh - 48px)}
-#legend{position:fixed;bottom:20px;left:20px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:12px;z-index:10;min-width:170px}
+#legend{position:fixed;bottom:20px;left:20px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:12px;z-index:10;min-width:170px;max-height:calc(100vh - 120px);overflow-y:auto}
 .lg-t{font-weight:600;margin-bottom:8px;color:var(--fg)}
 .lg-i{display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--fg2);padding:2px 4px;border-radius:4px;transition:background .15s,opacity .15s}
 .lg-i:hover{background:var(--bg3)}
 .lg-d{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.lg-d.sq{border-radius:2px}
 .lg-m{margin-top:10px;padding-top:8px;border-top:1px solid var(--border);color:var(--fg2);line-height:1.6}
 #tip{display:none;position:fixed;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:13px;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,.5);max-width:360px;pointer-events:none}
 #tip.show{display:block}
@@ -198,19 +236,32 @@ HTML_AFTER = [=[;
 (function(){
 'use strict';
 const D=VIEW_DATA;
-const GC={};for(const g of D.groups)GC[g.name]=g.color;
 
-// ── Nodes ──
+// ── Lookup maps ──
+const DC={};for(const d of D.domains)DC[d.name]=d.color;
+const DL={};for(const l of D.layers||[])for(const dom of l.domains||[])DL[dom]=l.name;
+const layerDomains={};for(const l of D.layers||[])layerDomains[l.name]=new Set(l.domains||[]);
+
+// ── Nodes (initial positions seeded by domain sector) ──
 const W=window.innerWidth,H=window.innerHeight-48;
-const nodes=D.nodes.map(n=>({
-  ...n,
-  x:W/2+(Math.random()-.5)*Math.min(W,600),
-  y:H/2+(Math.random()-.5)*Math.min(H,400),
-  vx:0,vy:0,
-  r:Math.max(22,Math.min(72,12+Math.sqrt(n.lines)*1.8)),
-  color:GC[n.group]||'#8b949e',
-  fixed:false
-}));
+const domNames=D.domains.map(d=>d.name);
+const domIdx={};for(let i=0;i<domNames.length;i++)domIdx[domNames[i]]=i;
+const domCount=Math.max(1,domNames.length);
+const sectorR=Math.min(W,H)*0.3;
+const nodes=D.nodes.map(n=>{
+  const di=domIdx[n.domain]!=null?domIdx[n.domain]:0;
+  const angle=(2*Math.PI*di/domCount)-Math.PI/2;
+  const jitter=sectorR*0.35;
+  return{
+    ...n,
+    x:W/2+Math.cos(angle)*sectorR+(Math.random()-.5)*jitter,
+    y:H/2+Math.sin(angle)*sectorR+(Math.random()-.5)*jitter,
+    vx:0,vy:0,
+    r:Math.max(22,Math.min(72,12+Math.sqrt(n.lines)*1.8)),
+    color:DC[n.domain]||'#8b949e',
+    fixed:false
+  };
+});
 const NM={};for(const n of nodes)NM[n.id]=n;
 const edges=D.edges.filter(e=>NM[e.source]&&NM[e.target]);
 
@@ -229,36 +280,46 @@ for(const b of D.bindings||[]){
 
 // ── Legend ──
 const leg=document.getElementById('legend');
-let lh='<div class="lg-t">Layers</div>';
-D.groups.sort((a,b)=>a.label.localeCompare(b.label));
-for(const g of D.groups)lh+='<div class="lg-i" data-layer="'+g.name+'" style="cursor:pointer"><div class="lg-d" style="background:'+g.color+'"></div>'+g.label+'</div>';
-lh+='<div class="lg-m">Size = lines of code<br>Ring = complexity (hue)<br><span style="opacity:.6">Click layer to filter</span></div>';
+let lh='<div class="lg-t">Domains</div>';
+D.domains.sort((a,b)=>a.label.localeCompare(b.label));
+for(const d of D.domains)lh+='<div class="lg-i" data-ft="domain" data-fk="'+d.name+'" style="cursor:pointer"><div class="lg-d" style="background:'+d.color+'"></div>'+d.label+'</div>';
+if(D.layers&&D.layers.length>0){
+  lh+='<div class="lg-t" style="margin-top:12px">Layers</div>';
+  for(const l of D.layers)lh+='<div class="lg-i" data-ft="layer" data-fk="'+l.name+'" style="cursor:pointer"><div class="lg-d sq" style="background:transparent;border:2px solid var(--fg2)"></div>'+l.name+' <span style="opacity:.5;font-size:10px">('+((l.domains||[]).length)+')</span></div>';
+}
+lh+='<div class="lg-m">Size = lines of code<br>Ring = complexity (hue)<br>Color = domain<br><span style="opacity:.6">Click to filter</span></div>';
 leg.innerHTML=lh;
 
-// Layer filter
-let activeLayer=null,lockedLayer=null;
-function applyLayerFilter(layer){
-  activeLayer=layer;
-  for(const li of leg.querySelectorAll('.lg-i'))li.style.opacity=(!layer||li.dataset.layer===layer)?1:0.35;
-  for(const ne of nEls)ne.el.classList.toggle('dim',!!layer&&ne.d.group!==layer);
+// ── Filter (unified for domain/layer) ──
+let activeFilter=null,lockedFilter=null;
+function matchesFilter(domain,filter){
+  if(!filter)return true;
+  if(filter.type==='domain')return domain===filter.key;
+  if(filter.type==='layer'){const ld=layerDomains[filter.key];return ld&&ld.has(domain);}
+  return true;
+}
+function applyFilter(filter){
+  activeFilter=filter;
+  for(const li of leg.querySelectorAll('.lg-i'))li.style.opacity=(!filter||(li.dataset.ft===filter.type&&li.dataset.fk===filter.key))?1:0.35;
+  for(const ne of nEls)ne.el.classList.toggle('dim',!matchesFilter(ne.d.domain,filter));
   for(const ee of eEls){
     const sn=NM[ee.d.source],tn=NM[ee.d.target];
-    const hit=!layer||(sn&&sn.group===layer)||(tn&&tn.group===layer);
+    const hit=!filter||(sn&&matchesFilter(sn.domain,filter))||(tn&&matchesFilter(tn.domain,filter));
     ee.el.classList.toggle('dim',!hit);
   }
 }
 for(const li of leg.querySelectorAll('.lg-i')){
   li.addEventListener('mouseenter',function(){
-    if(!lockedLayer)applyLayerFilter(this.dataset.layer);
+    if(!lockedFilter)applyFilter({type:this.dataset.ft,key:this.dataset.fk});
   });
   li.addEventListener('mouseleave',function(){
-    if(!lockedLayer)applyLayerFilter(null);
+    if(!lockedFilter)applyFilter(null);
   });
   li.addEventListener('click',function(){
-    const layer=this.dataset.layer;
-    if(lockedLayer===layer){lockedLayer=null;applyLayerFilter(null);}
-    else{lockedLayer=layer;applyLayerFilter(layer);}
-    for(const li2 of leg.querySelectorAll('.lg-i'))li2.style.fontWeight=(lockedLayer===li2.dataset.layer)?'600':'';
+    const f={type:this.dataset.ft,key:this.dataset.fk};
+    if(lockedFilter&&lockedFilter.type===f.type&&lockedFilter.key===f.key){lockedFilter=null;applyFilter(null);}
+    else{lockedFilter=f;applyFilter(f);}
+    for(const li2 of leg.querySelectorAll('.lg-i'))li2.style.fontWeight=(lockedFilter&&lockedFilter.type===li2.dataset.ft&&lockedFilter.key===li2.dataset.fk)?'600':'';
   });
 }
 
@@ -353,12 +414,12 @@ const AD=0.012,VD=0.55;
 
 function tick(){
   const N=nodes.length;
-  // Charge repulsion
+  // Charge repulsion (same domain = less repulsion)
   for(let i=0;i<N;i++){for(let j=i+1;j<N;j++){
     const a=nodes[i],b=nodes[j];
     let dx=b.x-a.x||.1,dy=b.y-a.y||.1;
     const d2=dx*dx+dy*dy,d=Math.sqrt(d2);
-    const str=a.group===b.group?-800:-1400;
+    const str=a.domain===b.domain?-800:-1400;
     const f=str/d2*alpha;
     const fx=dx/d*f,fy=dy/d*f;
     if(!a.fixed){a.vx-=fx;a.vy-=fy;}
@@ -384,18 +445,18 @@ function tick(){
     n.vy+=(H/2-n.y)*0.0008*alpha;
   }
 
-  // Group clustering
+  // Domain clustering
   const gc={},gn={};
   for(const n of nodes){
-    if(!gc[n.group]){gc[n.group]={x:0,y:0};gn[n.group]=0;}
-    gc[n.group].x+=n.x;gc[n.group].y+=n.y;gn[n.group]++;
+    if(!gc[n.domain]){gc[n.domain]={x:0,y:0};gn[n.domain]=0;}
+    gc[n.domain].x+=n.x;gc[n.domain].y+=n.y;gn[n.domain]++;
   }
   for(const g in gc){gc[g].x/=gn[g];gc[g].y/=gn[g];}
   for(const n of nodes){
     if(n.fixed)continue;
-    const c=gc[n.group];
-    n.vx+=(c.x-n.x)*0.008*alpha;
-    n.vy+=(c.y-n.y)*0.008*alpha;
+    const c=gc[n.domain];
+    n.vx+=(c.x-n.x)*0.02*alpha;
+    n.vy+=(c.y-n.y)*0.02*alpha;
   }
 
   // Collision
@@ -518,8 +579,8 @@ for(const{d:n,el}of nEls){
       ee.el.setAttribute('marker-end','url(#arr)');
     }
     hideTip();
-    // Re-apply layer filter if locked
-    if(lockedLayer)applyLayerFilter(lockedLayer);
+    // Re-apply filter if locked
+    if(lockedFilter)applyFilter(lockedFilter);
   });
   el.addEventListener('mousemove',function(ev){if(hovId)moveTip(ev);});
 }
@@ -528,21 +589,24 @@ for(const{d:n,el}of nEls){
 const tip=document.getElementById('tip');
 function showTip(ev,n){
   let h='<h3>'+n.id+'</h3>';
+  const domInfo=D.domains.find(function(d){return d.name===n.domain})||{};
+  const layer=DL[n.domain];
   const rows=[
-    ['Layer',(D.groups.find(function(g){return g.name===n.group})||{}).label||n.group],
+    ['Domain','<span style="color:'+(domInfo.color||'var(--fg)')+'">'+( domInfo.label||n.domain)+'</span>'],
+  ];
+  if(layer)rows.push(['Layer',layer]);
+  rows.push(
     ['Code units',n.entries],
     ['Total lines',n.lines],
     ['Max cyclomatic',n.max_cyclo],
-    ['Avg complexity hue',n.avg_hue!=null?n.avg_hue.toFixed(1):'—'],
-  ];
+    ['Avg complexity hue',n.avg_hue!=null?n.avg_hue.toFixed(1):'—']
+  );
   for(const r of rows)h+='<div class="tr"><span class="tl">'+r[0]+'</span><span class="tv">'+r[1]+'</span></div>';
   const deps=edges.filter(function(ed){return ed.source===n.id}).map(function(ed){return ed.target});
   const users=edges.filter(function(ed){return ed.target===n.id}).map(function(ed){return ed.source});
   if(deps.length)h+='<div class="ts">Depends on ('+deps.length+')</div><div class="tr"><span class="tl">'+deps.join(', ')+'</span></div>';
   if(users.length)h+='<div class="ts">Used by ('+users.length+')</div><div class="tr"><span class="tl">'+users.join(', ')+'</span></div>';
-  // Edge symbols on hover
   const outEdges=edges.filter(function(ed){return ed.source===n.id});
-  const inEdges=edges.filter(function(ed){return ed.target===n.id});
   if(outEdges.length){
     h+='<div class="ts">Imports</div>';
     for(const ed of outEdges)h+='<div class="tr"><span class="tl">'+ed.target+'</span><span class="tv">'+ed.label+'</span></div>';
@@ -563,7 +627,7 @@ document.getElementById('search').addEventListener('input',function(ev){
   if(!q){
     for(const ne of nEls)ne.el.classList.remove('dim');
     for(const ee of eEls)ee.el.classList.remove('dim');
-    if(lockedLayer)applyLayerFilter(lockedLayer);
+    if(lockedFilter)applyFilter(lockedFilter);
     return;
   }
   for(const ne of nEls)ne.el.classList.toggle('dim',!ne.d.id.toLowerCase().includes(q));
