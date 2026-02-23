@@ -145,7 +145,6 @@ fn apply_churn(data: &mut AstData, churn: &ChurnMap) {
 
         for node in &mut file.nodes {
             node.git_churn_30d = Some(file_churn);
-            node.coverage = None;
         }
     }
 }

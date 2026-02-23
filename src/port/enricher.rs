@@ -23,3 +23,28 @@ pub trait Enricher: Send + Sync {
         ctx: &EnrichContext<'_>,
     ) -> Result<(), crate::Error>;
 }
+
+/// Runs multiple enrichers in sequence.
+pub struct ChainEnricher {
+    enrichers: Vec<Box<dyn Enricher>>,
+}
+
+impl ChainEnricher {
+    pub fn new(enrichers: Vec<Box<dyn Enricher>>) -> Self {
+        Self { enrichers }
+    }
+}
+
+impl Enricher for ChainEnricher {
+    fn enrich(
+        &self,
+        data: &mut AstData,
+        config: &EnrichConfig,
+        ctx: &EnrichContext<'_>,
+    ) -> Result<(), crate::Error> {
+        for enricher in &self.enrichers {
+            enricher.enrich(data, config, ctx)?;
+        }
+        Ok(())
+    }
+}

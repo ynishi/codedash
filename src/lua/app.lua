@@ -17,6 +17,7 @@ local app = sen.app("codedash", "Code metrics visualization")
         :option("t", "top", "Show top N entries", { default = "10" })
         :option("c", "config", "Config file path (.codedash.lua)")
         :option("d", "domain", "Filter output to a specific domain")
+        :option("", "cov-file", "Coverage JSON file (cargo llvm-cov --json output)")
         :done()
     :command("parse", "Parse source files without enrichment or evaluation")
         :arg("path", "Source directory to parse (default: .)", { required = false })
@@ -36,6 +37,7 @@ local app = sen.app("codedash", "Code metrics visualization")
         :option("l", "lang", "Language: rust, typescript", { default = "rust" })
         :option("o", "out", "Output file path", { default = "codedash-view.html" })
         :option("c", "config", "Config file path (.codedash.lua)")
+        :option("", "cov-file", "Coverage JSON file (cargo llvm-cov --json output)")
         :done()
     :command("check-health", "Diagnose parser, git, and config status")
         :arg("path", "Source directory to check (default: .)", { required = false })
@@ -144,9 +146,14 @@ app:route("analyze", function(ctx)
   local top_n = tonumber(ctx.args.top) or 10
   local config_path = ctx.args.config
   local domain_filter = ctx.args.domain
+  local cov_file = ctx.args["cov-file"]
 
   -- Step 1: Rust-side parse + enrich
-  local enriched_json = __rustlib.analyze(path, lang)
+  local opts = nil
+  if cov_file then
+    opts = { coverage_file = cov_file }
+  end
+  local enriched_json = __rustlib.analyze(path, lang, opts)
 
   -- Step 2: Lua-side eval using codedash engine
   local config = resolve_config(config_path)
@@ -451,9 +458,14 @@ app:route("view", function(ctx)
   local lang = ctx.args.lang or "rust"
   local out_path = ctx.args.out or "codedash-view.html"
   local config_path = ctx.args.config
+  local cov_file = ctx.args["cov-file"]
 
   -- Step 1: Rust-side parse + enrich (full pipeline for metrics)
-  local enriched_json = __rustlib.analyze(path, lang)
+  local opts = nil
+  if cov_file then
+    opts = { coverage_file = cov_file }
+  end
+  local enriched_json = __rustlib.analyze(path, lang, opts)
 
   -- Step 2: Lua-side eval
   local config = resolve_config(config_path)

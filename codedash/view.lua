@@ -7,8 +7,10 @@
   Visual encoding:
     circle size   = total lines of code in module
     circle color  = domain (project area / crate)
-    border ring   = complexity hue (blue=low → red=high)
-    ring width    = max cyclomatic complexity
+    inner ring    = complexity hue (green=low → red=high)
+    inner ring w  = max cyclomatic complexity
+    outer ring    = git churn (amber, width ∝ change frequency)
+    badge         = coverage status (shield=covered, warn=uncovered)
     edges         = import dependencies
 
   Data model:
@@ -74,6 +76,9 @@ function M.build_data(eval_result, ast_edges, bindings, domain_map, layers_confi
         max_cyclo = 0,
         hue_sum = 0,
         hue_count = 0,
+        churn = 0,
+        coverage_sum = 0,
+        coverage_count = 0,
       }
     end
     local f = file_map[file]
@@ -84,6 +89,11 @@ function M.build_data(eval_result, ast_edges, bindings, domain_map, layers_confi
       f.hue_sum = f.hue_sum + entry.percept.hue
       f.hue_count = f.hue_count + 1
     end
+    f.churn = math.max(f.churn, n.git_churn_30d or 0)
+    if n.coverage then
+      f.coverage_sum = f.coverage_sum + n.coverage
+      f.coverage_count = f.coverage_count + 1
+    end
   end
 
   local nodes = {}
@@ -91,6 +101,9 @@ function M.build_data(eval_result, ast_edges, bindings, domain_map, layers_confi
     f.avg_hue = f.hue_count > 0 and (f.hue_sum / f.hue_count) or 120
     f.hue_sum = nil
     f.hue_count = nil
+    f.avg_coverage = f.coverage_count > 0 and (f.coverage_sum / f.coverage_count) or nil
+    f.coverage_sum = nil
+    f.coverage_count = nil
     nodes[#nodes + 1] = f
   end
 
@@ -125,6 +138,7 @@ function M.build_data(eval_result, ast_edges, bindings, domain_map, layers_confi
         nodes[#nodes + 1] = {
           id = id, domain = stripped_domain[id] or "unknown",
           lines = 0, entries = 0, max_cyclo = 0, avg_hue = 120,
+          churn = 0, avg_coverage = nil,
         }
       end
     end
@@ -207,8 +221,10 @@ svg{position:fixed;top:48px;left:0;right:0;bottom:0;width:100%;height:calc(100vh
 .edge.dim{opacity:.06}
 .node-g{cursor:grab}.node-g:active{cursor:grabbing}
 .node-g .ring{transition:opacity .15s}
+.node-g .churn-ring{transition:opacity .15s}
 .node-g .body{transition:opacity .15s}
-.node-g.dim .ring,.node-g.dim .body{opacity:.1}
+.node-g .cov-badge{transition:opacity .15s}
+.node-g.dim .ring,.node-g.dim .churn-ring,.node-g.dim .body,.node-g.dim .cov-badge{opacity:.1}
 .node-g.dim text{opacity:.1}
 .node-g text{fill:var(--fg);pointer-events:none;text-anchor:middle;dominant-baseline:central;text-shadow:0 1px 3px rgba(0,0,0,.9)}
 </style></head><body>
@@ -287,7 +303,9 @@ if(D.layers&&D.layers.length>0){
   lh+='<div class="lg-t" style="margin-top:12px">Layers</div>';
   for(const l of D.layers)lh+='<div class="lg-i" data-ft="layer" data-fk="'+l.name+'" style="cursor:pointer"><div class="lg-d sq" style="background:transparent;border:2px solid var(--fg2)"></div>'+l.name+' <span style="opacity:.5;font-size:10px">('+((l.domains||[]).length)+')</span></div>';
 }
-lh+='<div class="lg-m">Size = lines of code<br>Ring = complexity (hue)<br>Color = domain<br><span style="opacity:.6">Click to filter</span></div>';
+lh+='<div class="lg-m">Size = lines of code<br>Inner ring = complexity (hue)<br>Outer ring = <span style="color:#f0883e">git churn</span><br>Color = domain';
+if(hasCoverage)lh+='<br>Badge = coverage';
+lh+='<br><span style="opacity:.6">Click to filter</span></div>';
 leg.innerHTML=lh;
 
 // ── Filter (unified for domain/layer) ──
@@ -341,12 +359,33 @@ const eEls=edges.map(ed=>{
   return{d:ed,el:p};
 });
 
+// Coverage data availability (hide badges if all null)
+const hasCoverage=nodes.some(n=>n.avg_coverage!=null);
+
+// Churn max (for normalizing ring width)
+const maxChurn=Math.max(1,...nodes.map(n=>n.churn||0));
+
 // Node elements
 const nEls=nodes.map(n=>{
   const g=document.createElementNS(NS,'g');
   g.classList.add('node-g');g.dataset.id=n.id;
 
-  // Complexity ring
+  // Churn outer ring (amber, width proportional to churn)
+  const churn=n.churn||0;
+  if(churn>0){
+    const cw=Math.max(2,Math.min(10,2+churn/maxChurn*8));
+    const rw_inner=Math.max(2,Math.min(8,n.max_cyclo*0.5));
+    const churnRing=document.createElementNS(NS,'circle');
+    churnRing.classList.add('churn-ring');
+    churnRing.setAttribute('r',n.r+rw_inner+cw/2+1);
+    churnRing.setAttribute('stroke','#f0883e');
+    churnRing.setAttribute('stroke-width',cw);
+    churnRing.setAttribute('stroke-opacity',0.35+churn/maxChurn*0.45);
+    churnRing.setAttribute('fill','none');
+    g.appendChild(churnRing);
+  }
+
+  // Complexity inner ring
   const rw=Math.max(2,Math.min(8,n.max_cyclo*0.5));
   const ring=document.createElementNS(NS,'circle');
   ring.classList.add('ring');
@@ -364,6 +403,40 @@ const nEls=nodes.map(n=>{
   circ.setAttribute('fill',n.color);
   circ.setAttribute('opacity',0.85);
   g.appendChild(circ);
+
+  // Coverage badge (only if coverage data exists somewhere)
+  if(hasCoverage){
+    const bx=n.r*0.6,by=-n.r*0.6;
+    const badge=document.createElementNS(NS,'g');
+    badge.classList.add('cov-badge');
+    badge.setAttribute('transform','translate('+bx+','+by+')');
+    if(n.avg_coverage!=null){
+      // Shield: green=high, yellow=mid, red=low
+      const cov=n.avg_coverage;
+      const col=cov>=0.7?'#3fb950':cov>=0.4?'#d29922':'#f85149';
+      const sh=document.createElementNS(NS,'path');
+      sh.setAttribute('d','M0-6C-4-6-6-4-6-1C-6 3 0 6 0 6S6 3 6-1C6-4 4-6 0-6Z');
+      sh.setAttribute('fill',col);sh.setAttribute('stroke','#0d1117');sh.setAttribute('stroke-width',0.8);
+      badge.appendChild(sh);
+      const pct=document.createElementNS(NS,'text');
+      pct.textContent=Math.round(cov*100);
+      pct.setAttribute('text-anchor','middle');pct.setAttribute('dy','1');
+      pct.setAttribute('font-size','6');pct.setAttribute('fill','#fff');pct.setAttribute('font-weight','700');
+      badge.appendChild(pct);
+    }else{
+      // Warning triangle: no coverage data
+      const warn=document.createElementNS(NS,'path');
+      warn.setAttribute('d','M0-5L5 4H-5Z');
+      warn.setAttribute('fill','#6e7681');warn.setAttribute('stroke','#0d1117');warn.setAttribute('stroke-width',0.8);
+      badge.appendChild(warn);
+      const ex=document.createElementNS(NS,'text');
+      ex.textContent='?';
+      ex.setAttribute('text-anchor','middle');ex.setAttribute('dy','2');
+      ex.setAttribute('font-size','6');ex.setAttribute('fill','#fff');ex.setAttribute('font-weight','700');
+      badge.appendChild(ex);
+    }
+    g.appendChild(badge);
+  }
 
   // Module name
   const label=shortN(n.id);
@@ -599,7 +672,9 @@ function showTip(ev,n){
     ['Code units',n.entries],
     ['Total lines',n.lines],
     ['Max cyclomatic',n.max_cyclo],
-    ['Avg complexity hue',n.avg_hue!=null?n.avg_hue.toFixed(1):'—']
+    ['Avg complexity hue',n.avg_hue!=null?n.avg_hue.toFixed(1):'—'],
+    ['Git churn (30d)',(n.churn||0)>0?'<span style="color:#f0883e">'+n.churn+'</span>':'0'],
+    ['Coverage',n.avg_coverage!=null?'<span style="color:'+(n.avg_coverage>=0.7?'#3fb950':n.avg_coverage>=0.4?'#d29922':'#f85149')+'">'+Math.round(n.avg_coverage*100)+'%</span>':'<span style="color:var(--fg2)">N/A</span>']
   );
   for(const r of rows)h+='<div class="tr"><span class="tl">'+r[0]+'</span><span class="tv">'+r[1]+'</span></div>';
   const deps=edges.filter(function(ed){return ed.source===n.id}).map(function(ed){return ed.target});

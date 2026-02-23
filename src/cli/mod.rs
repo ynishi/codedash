@@ -5,9 +5,11 @@ use std::sync::Arc;
 use senl::SenlApp;
 
 use crate::app::analyze::AnalyzePipeline;
+use crate::infra::coverage::CoverageEnricher;
 use crate::infra::git::GitEnricher;
 use crate::infra::lua::{modules::CODEDASH_FILES, rustlib};
 use crate::infra::parser::registry::ParserRegistry;
+use crate::port::enricher::ChainEnricher;
 use crate::Error;
 
 const APP_LUA: &str = include_str!("../lua/app.lua");
@@ -16,7 +18,10 @@ const APP_LUA: &str = include_str!("../lua/app.lua");
 pub fn run() -> Result<i32, Error> {
     let repo_path = std::env::current_dir()?;
     let registry = ParserRegistry::new();
-    let enricher = Box::new(GitEnricher::new());
+    let enricher = Box::new(ChainEnricher::new(vec![
+        Box::new(GitEnricher::new()),
+        Box::new(CoverageEnricher::new()),
+    ]));
     let pipeline = Arc::new(AnalyzePipeline::new(registry, enricher, repo_path));
 
     let exit_code = SenlApp::from_source("codedash", APP_LUA)

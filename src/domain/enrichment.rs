@@ -17,6 +17,8 @@ pub struct EnrichConfig {
     pub cochange_days: u32,
     /// Minimum co-change count to include (default: 2).
     pub min_cochange: u32,
+    /// Path to coverage JSON file (cargo-llvm-cov --json output).
+    pub coverage_file: Option<String>,
 }
 
 impl Default for EnrichConfig {
@@ -25,6 +27,7 @@ impl Default for EnrichConfig {
             churn_days: 30,
             cochange_days: 90,
             min_cochange: 2,
+            coverage_file: None,
         }
     }
 }

@@ -61,18 +61,27 @@ pub fn inject_rustlib(lua: &mlua::Lua, pipeline: Arc<AnalyzePipeline>) -> Result
     rustlib.set("fs", fs_table).map_err(lua_err)?;
 
     // analyze function (full pipeline: parse + enrich)
+    // Signature: analyze(path, lang [, opts_table])
+    //   opts_table = { coverage_file = "path/to/coverage.json" }
     {
         let pipeline = Arc::clone(&pipeline);
         let analyze_fn = lua
-            .create_function(move |_, (path, lang): (String, String)| {
-                let config = crate::domain::config::AnalyzeConfig::new(
-                    std::path::PathBuf::from(&path),
-                    lang,
-                );
-                pipeline
-                    .run(&config)
-                    .map_err(|e| mlua::Error::external(e.to_string()))
-            })
+            .create_function(
+                move |_, (path, lang, opts): (String, String, Option<mlua::Table>)| {
+                    let mut config = crate::domain::config::AnalyzeConfig::new(
+                        std::path::PathBuf::from(&path),
+                        lang,
+                    );
+                    if let Some(opts) = opts {
+                        if let Ok(cov_file) = opts.get::<String>("coverage_file") {
+                            config.enrich.coverage_file = Some(cov_file);
+                        }
+                    }
+                    pipeline
+                        .run(&config)
+                        .map_err(|e| mlua::Error::external(e.to_string()))
+                },
+            )
             .map_err(lua_err)?;
         rustlib.set("analyze", analyze_fn).map_err(lua_err)?;
     }
