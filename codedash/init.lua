@@ -16,7 +16,7 @@
 local M = {}
 
 -- Pipeline
-M.init   = require("codedash.eval.init").init
+M.init   = require("codedash.eval").init
 M.report = require("codedash.eval.report")
 
 -- DSL constructors (for custom configs)
