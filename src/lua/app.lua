@@ -31,6 +31,12 @@ local app = sen.app("codedash", "Code metrics visualization")
         :done()
     :command("config-init", "Generate a .codedash.lua template in current directory")
         :done()
+    :command("view", "Generate interactive HTML dependency map")
+        :arg("path", "Source directory (default: .)", { required = false })
+        :option("l", "lang", "Language: rust, typescript", { default = "rust" })
+        :option("o", "out", "Output file path", { default = "codedash-view.html" })
+        :option("c", "config", "Config file path (.codedash.lua)")
+        :done()
     :command("check-health", "Diagnose parser, git, and config status")
         :arg("path", "Source directory to check (default: .)", { required = false })
         :option("l", "lang", "Language: rust, typescript", { default = "rust" })
@@ -352,6 +358,71 @@ return {
   f:close()
 
   return sen.ok("Created .codedash.lua")
+end)
+
+-- ================================================================
+-- View route (interactive HTML dependency map)
+-- ================================================================
+app:route("view", function(ctx)
+  local path = ctx.args.path or "."
+  local lang = ctx.args.lang or "rust"
+  local out_path = ctx.args.out or "codedash-view.html"
+  local config_path = ctx.args.config
+
+  -- Step 1: Rust-side parse + enrich (full pipeline for metrics)
+  local enriched_json = __rustlib.analyze(path, lang)
+
+  -- Step 2: Lua-side eval
+  local config = resolve_config(config_path)
+  if not config then
+    return sen.err("Failed to load config")
+  end
+
+  local ast_data = __rustlib.json.decode(enriched_json)
+  local loader = require("codedash.eval.loader")
+  local nodes = loader.to_nodes(ast_data)
+
+  local settings_mod = require("codedash.eval.settings")
+  local resolved = settings_mod.resolve(config)
+
+  local classify = require("codedash.eval.classify")
+  local domain_map = {}
+  if #resolved.domains > 0 then
+    domain_map = classify.build_domain_map({
+      domains  = resolved.domains,
+      exclude  = resolved.exclude,
+      fallback = resolved.fallback,
+    }, nodes)
+  end
+
+  local lua_eval = require("codedash.eval.lua_eval")
+  local r = lua_eval.run(resolved.bindings, nodes, {
+    domain_map = domain_map,
+  })
+
+  -- Step 3: Count unique modules (files)
+  local file_set = {}
+  for _, entry in ipairs(r.entries) do
+    file_set[entry.node.file] = true
+  end
+  local module_count = 0
+  for _ in pairs(file_set) do module_count = module_count + 1 end
+
+  -- Step 4: Build view data (aggregate by module + edges)
+  local view = require("codedash.view")
+  local data_json = view.build_data(r, ast_data.edges or {}, resolved.bindings)
+
+  -- Step 5: Generate HTML and write to file
+  local html = view.generate_html(data_json)
+  local f, err = io.open(out_path, "w")
+  if not f then
+    return sen.err(string.format("Failed to write %s: %s", out_path, err))
+  end
+  f:write(html)
+  f:close()
+
+  return sen.ok(string.format("Wrote %s (%d modules, %d code units, %d edges)",
+    out_path, module_count, #r.entries, #(ast_data.edges or {})))
 end)
 
 -- ================================================================

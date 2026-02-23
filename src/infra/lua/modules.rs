@@ -123,6 +123,8 @@ pub const CODEDASH_FILES: &[(&str, &str)] = &[
         "presets/normalizers/rank.lua",
         include_str!("../../../codedash/presets/normalizers/rank.lua"),
     ),
+    // View (HTML generator)
+    ("view.lua", include_str!("../../../codedash/view.lua")),
     // Preset percepts
     (
         "presets/percepts/border.lua",
