@@ -111,8 +111,15 @@ impl AnalyzePipeline {
         build_edges(&mut ast_data);
 
         // Enrich with git metrics
+        // Use the analysis target path (canonicalized) as repo_path for enrichment.
+        // This ensures coverage path normalization works when codedash is invoked
+        // from a different directory than the target project.
+        let enrichment_repo_path = config
+            .path
+            .canonicalize()
+            .unwrap_or_else(|_| config.path.clone());
         let ctx = EnrichContext {
-            repo_path: &self.repo_path,
+            repo_path: &enrichment_repo_path,
             strip_prefix: &self.strip_prefix,
             extensions: parser.extensions(),
         };

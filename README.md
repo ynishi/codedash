@@ -39,7 +39,8 @@ codedash analyze -d core
 # Generate interactive HTML dependency map
 codedash view
 
-# With coverage data (cargo-llvm-cov --json output)
+# With coverage data
+cargo llvm-cov --json --output-path coverage.json
 codedash analyze --cov-file coverage.json -o json
 codedash view --cov-file coverage.json
 

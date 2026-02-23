@@ -212,10 +212,15 @@ svg{position:fixed;top:48px;left:0;right:0;bottom:0;width:100%;height:calc(100vh
 .lg-m{margin-top:10px;padding-top:8px;border-top:1px solid var(--border);color:var(--fg2);line-height:1.6}
 #tip{display:none;position:fixed;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:13px;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,.5);max-width:360px;pointer-events:none}
 #tip.show{display:block}
+#tip.pinned{pointer-events:auto;border-color:var(--accent)}
 #tip h3{font-size:14px;margin:0 0 6px;color:var(--fg)}
 .tr{display:flex;justify-content:space-between;gap:16px;line-height:1.7}
 .tl{color:var(--fg2)}.tv{color:var(--fg);font-weight:500;font-variant-numeric:tabular-nums}
 .ts{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);color:var(--accent);font-size:12px;font-weight:600}
+.tip-actions{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:8px}
+.tip-btn{background:var(--bg3);border:1px solid var(--border);color:var(--fg2);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;transition:background .15s,color .15s}
+.tip-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tip-btn.copied{background:#3fb950;border-color:#3fb950;color:#fff}
 .edge{stroke:var(--border);stroke-width:1.2;fill:none;opacity:.45;transition:opacity .15s,stroke .15s,stroke-width .15s}
 .edge.hl{stroke:var(--accent);opacity:.85;stroke-width:2}
 .edge.dim{opacity:.06}
@@ -280,6 +285,7 @@ const nodes=D.nodes.map(n=>{
 });
 const NM={};for(const n of nodes)NM[n.id]=n;
 const edges=D.edges.filter(e=>NM[e.source]&&NM[e.target]);
+const hasCoverage=nodes.some(n=>n.avg_coverage!=null);
 
 // ── Stats ──
 document.getElementById('s-mod').textContent=nodes.length;
@@ -289,6 +295,14 @@ document.getElementById('s-total').textContent=D.total||0;
 // ── Bindings chips ──
 const bEl=document.getElementById('bindings');
 for(const b of D.bindings||[]){
+  const c=document.createElement('span');c.className='chip';
+  c.innerHTML='<span class="p">'+b.percept+'</span>&larr;'+b.index;
+  bEl.appendChild(c);
+}
+// View-specific visual encodings
+const viewBindings=[{percept:'outer ring',index:'churn'}];
+if(hasCoverage)viewBindings.push({percept:'badge',index:'coverage'});
+for(const b of viewBindings){
   const c=document.createElement('span');c.className='chip';
   c.innerHTML='<span class="p">'+b.percept+'</span>&larr;'+b.index;
   bEl.appendChild(c);
@@ -358,9 +372,6 @@ const eEls=edges.map(ed=>{
   gM.appendChild(p);
   return{d:ed,el:p};
 });
-
-// Coverage data availability (hide badges if all null)
-const hasCoverage=nodes.some(n=>n.avg_coverage!=null);
 
 // Churn max (for normalizing ring width)
 const maxChurn=Math.max(1,...nodes.map(n=>n.churn||0));
@@ -580,11 +591,11 @@ function anim(){
 anim();
 
 // ── Drag ──
-let dragN=null,dOff={x:0,y:0};
+let dragN=null,dOff={x:0,y:0},didDrag=false;
 for(const{d:n,el}of nEls){
   el.addEventListener('mousedown',function(ev){
     ev.stopPropagation();
-    dragN=n;n.fixed=true;
+    dragN=n;n.fixed=true;didDrag=false;
     const r=svg.getBoundingClientRect();
     dOff.x=n.x-(ev.clientX-r.left-tx)/sc;
     dOff.y=n.y-(ev.clientY-r.top-ty)/sc;
@@ -593,12 +604,19 @@ for(const{d:n,el}of nEls){
 }
 window.addEventListener('mousemove',function(ev){
   if(!dragN)return;
+  didDrag=true;
   const r=svg.getBoundingClientRect();
   dragN.x=(ev.clientX-r.left-tx)/sc+dOff.x;
   dragN.y=(ev.clientY-r.top-ty)/sc+dOff.y;
   render();
 });
-window.addEventListener('mouseup',function(){if(dragN){dragN.fixed=false;dragN=null;}});
+window.addEventListener('mouseup',function(ev){
+  if(dragN){
+    const clicked=dragN;
+    dragN.fixed=false;dragN=null;
+    if(!didDrag)pinTip(ev,clicked);
+  }
+});
 
 // ── Zoom ──
 svg.addEventListener('wheel',function(ev){
@@ -626,41 +644,68 @@ window.addEventListener('mousemove',function(ev){
 window.addEventListener('mouseup',function(){panning=false;svg.style.cursor='';});
 
 // ── Hover highlight ──
-let hovId=null;
+let hovId=null,pinnedNode=null;
 for(const{d:n,el}of nEls){
   el.addEventListener('mouseenter',function(ev){
+    if(pinnedNode)return;
     hovId=n.id;
-    const conn=new Set([n.id]);
-    for(const ed of edges){
-      if(ed.source===n.id)conn.add(ed.target);
-      if(ed.target===n.id)conn.add(ed.source);
-    }
-    for(const ne of nEls)ne.el.classList.toggle('dim',!conn.has(ne.d.id));
-    for(const ee of eEls){
-      const hit=ee.d.source===n.id||ee.d.target===n.id;
-      ee.el.classList.toggle('hl',hit);
-      ee.el.classList.toggle('dim',!hit);
-      ee.el.setAttribute('marker-end',hit?'url(#arr-hl)':'url(#arr)');
-    }
-    showTip(ev,n);
+    highlightNode(n);
+    showTip(ev,n,false);
   });
   el.addEventListener('mouseleave',function(){
+    if(pinnedNode)return;
     hovId=null;
-    for(const ne of nEls)ne.el.classList.remove('dim');
-    for(const ee of eEls){
-      ee.el.classList.remove('hl','dim');
-      ee.el.setAttribute('marker-end','url(#arr)');
-    }
+    clearHighlight();
     hideTip();
-    // Re-apply filter if locked
     if(lockedFilter)applyFilter(lockedFilter);
   });
-  el.addEventListener('mousemove',function(ev){if(hovId)moveTip(ev);});
+  el.addEventListener('mousemove',function(ev){if(hovId&&!pinnedNode)moveTip(ev);});
 }
 
-// ── Tooltip ──
+function highlightNode(n){
+  const conn=new Set([n.id]);
+  for(const ed of edges){
+    if(ed.source===n.id)conn.add(ed.target);
+    if(ed.target===n.id)conn.add(ed.source);
+  }
+  for(const ne of nEls)ne.el.classList.toggle('dim',!conn.has(ne.d.id));
+  for(const ee of eEls){
+    const hit=ee.d.source===n.id||ee.d.target===n.id;
+    ee.el.classList.toggle('hl',hit);
+    ee.el.classList.toggle('dim',!hit);
+    ee.el.setAttribute('marker-end',hit?'url(#arr-hl)':'url(#arr)');
+  }
+}
+function clearHighlight(){
+  for(const ne of nEls)ne.el.classList.remove('dim');
+  for(const ee of eEls){
+    ee.el.classList.remove('hl','dim');
+    ee.el.setAttribute('marker-end','url(#arr)');
+  }
+}
+
+// ── Tooltip (pin/copy) ──
 const tip=document.getElementById('tip');
-function showTip(ev,n){
+
+function pinTip(ev,n){
+  if(pinnedNode&&pinnedNode.id===n.id){unpinTip();return;}
+  pinnedNode=n;
+  highlightNode(n);
+  showTip(ev,n,true);
+  tip.classList.add('pinned');
+}
+function unpinTip(){
+  pinnedNode=null;
+  clearHighlight();
+  hideTip();
+  if(lockedFilter)applyFilter(lockedFilter);
+}
+// Click outside node → unpin
+svg.addEventListener('mouseup',function(ev){
+  if(pinnedNode&&!ev.target.closest('.node-g'))unpinTip();
+});
+
+function buildTipHtml(n,pinned){
   let h='<h3>'+n.id+'</h3>';
   const domInfo=D.domains.find(function(d){return d.name===n.domain})||{};
   const layer=DL[n.domain];
@@ -686,15 +731,51 @@ function showTip(ev,n){
     h+='<div class="ts">Imports</div>';
     for(const ed of outEdges)h+='<div class="tr"><span class="tl">'+ed.target+'</span><span class="tv">'+ed.label+'</span></div>';
   }
-  tip.innerHTML=h;
-  tip.classList.add('show');moveTip(ev);
+  if(pinned){
+    h+='<div class="tip-actions"><button class="tip-btn" id="copy-md">Copy as Markdown</button></div>';
+  }
+  return h;
+}
+
+function buildMarkdown(n){
+  const domInfo=D.domains.find(function(d){return d.name===n.domain})||{};
+  const layer=DL[n.domain];
+  const deps=edges.filter(function(ed){return ed.source===n.id}).map(function(ed){return ed.target});
+  const users=edges.filter(function(ed){return ed.target===n.id}).map(function(ed){return ed.source});
+  let md='**'+n.id+'**';
+  md+=' | '+( domInfo.label||n.domain);
+  if(layer)md+=' / '+layer;
+  md+='\n';
+  md+='- Lines: '+n.lines+', Cyclomatic: '+n.max_cyclo+', Units: '+n.entries+'\n';
+  md+='- Churn (30d): '+(n.churn||0);
+  if(n.avg_coverage!=null)md+=', Coverage: '+Math.round(n.avg_coverage*100)+'%';
+  md+='\n';
+  if(deps.length)md+='- Depends on: '+deps.join(', ')+'\n';
+  if(users.length)md+='- Used by: '+users.join(', ')+'\n';
+  return md;
+}
+
+function showTip(ev,n,pinned){
+  tip.innerHTML=buildTipHtml(n,pinned);
+  tip.classList.add('show');
+  if(!pinned)tip.classList.remove('pinned');
+  moveTip(ev);
+  if(pinned){
+    const btn=document.getElementById('copy-md');
+    if(btn)btn.addEventListener('click',function(){
+      navigator.clipboard.writeText(buildMarkdown(n)).then(function(){
+        btn.textContent='Copied!';btn.classList.add('copied');
+        setTimeout(function(){btn.textContent='Copy as Markdown';btn.classList.remove('copied');},1500);
+      });
+    });
+  }
 }
 function moveTip(ev){
   tip.style.left=Math.min(ev.clientX+24,window.innerWidth-400)+'px';
   tip.style.top=Math.min(ev.clientY-tip.offsetHeight-16,window.innerHeight-350)+'px';
   if(parseInt(tip.style.top)<52)tip.style.top=(ev.clientY+24)+'px';
 }
-function hideTip(){tip.classList.remove('show');}
+function hideTip(){tip.classList.remove('show','pinned');}
 
 // ── Search ──
 document.getElementById('search').addEventListener('input',function(ev){
