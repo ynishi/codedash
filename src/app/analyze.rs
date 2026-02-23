@@ -37,6 +37,48 @@ impl AnalyzePipeline {
         self
     }
 
+    /// List all registered parsers as (name, extensions) pairs.
+    pub fn list_parsers(&self) -> Vec<(&str, &[&str])> {
+        self.registry.list()
+    }
+
+    /// Get the repository path.
+    pub fn repo_path(&self) -> &std::path::Path {
+        &self.repo_path
+    }
+
+    /// Parse only: discover files → parse → build edges → JSON string (no enrichment).
+    pub fn parse_only(&self, config: &AnalyzeConfig) -> Result<String, Error> {
+        let parser = self
+            .registry
+            .for_name(&config.lang)
+            .ok_or_else(|| Error::Parse(format!("unsupported language: {}", config.lang)))?;
+
+        let files = discover_files(&config.path, parser.extensions())?;
+
+        let mut ast_data = AstData {
+            files: Vec::new(),
+            edges: Vec::new(),
+        };
+
+        let strip = (!self.strip_prefix.is_empty()).then_some(self.strip_prefix.as_str());
+        for file_path in &files {
+            let source = std::fs::read_to_string(file_path)?;
+            let rel_name = compute_rel_name(file_path, &config.path, strip);
+            match parser.parse_source(&source, &file_path.to_string_lossy(), &rel_name) {
+                Ok(file_data) => ast_data.files.push(file_data),
+                Err(e) => {
+                    eprintln!("[WARN] parse failed for {}: {e}", file_path.display());
+                }
+            }
+        }
+
+        build_edges(&mut ast_data);
+
+        let json = serde_json::to_string(&ast_data)?;
+        Ok(json)
+    }
+
     /// Run the full pipeline: discover files → parse → enrich → JSON string.
     pub fn run(&self, config: &AnalyzeConfig) -> Result<String, Error> {
         let parser = self

@@ -35,6 +35,14 @@ impl ParserRegistry {
             .find(|p| p.extensions().contains(&ext))
             .map(|p| p.as_ref())
     }
+
+    /// List all registered parsers as (name, extensions) pairs.
+    pub fn list(&self) -> Vec<(&str, &[&str])> {
+        self.parsers
+            .iter()
+            .map(|p| (p.name(), p.extensions()))
+            .collect()
+    }
 }
 
 impl Default for ParserRegistry {

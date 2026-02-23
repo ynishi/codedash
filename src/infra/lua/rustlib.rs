@@ -60,18 +60,92 @@ pub fn inject_rustlib(lua: &mlua::Lua, pipeline: Arc<AnalyzePipeline>) -> Result
     fs_table.set("file_exists", file_exists).map_err(lua_err)?;
     rustlib.set("fs", fs_table).map_err(lua_err)?;
 
-    // analyze function
-    let analyze_fn = lua
-        .create_function(move |_, (path, lang): (String, String)| {
-            let config =
-                crate::domain::config::AnalyzeConfig::new(std::path::PathBuf::from(&path), lang);
-            pipeline
-                .run(&config)
-                .map_err(|e| mlua::Error::external(e.to_string()))
-        })
-        .map_err(lua_err)?;
+    // analyze function (full pipeline: parse + enrich)
+    {
+        let pipeline = Arc::clone(&pipeline);
+        let analyze_fn = lua
+            .create_function(move |_, (path, lang): (String, String)| {
+                let config = crate::domain::config::AnalyzeConfig::new(
+                    std::path::PathBuf::from(&path),
+                    lang,
+                );
+                pipeline
+                    .run(&config)
+                    .map_err(|e| mlua::Error::external(e.to_string()))
+            })
+            .map_err(lua_err)?;
+        rustlib.set("analyze", analyze_fn).map_err(lua_err)?;
+    }
 
-    rustlib.set("analyze", analyze_fn).map_err(lua_err)?;
+    // parse_only function (parse + edges, no enrichment)
+    {
+        let pipeline = Arc::clone(&pipeline);
+        let parse_fn = lua
+            .create_function(move |_, (path, lang): (String, String)| {
+                let config = crate::domain::config::AnalyzeConfig::new(
+                    std::path::PathBuf::from(&path),
+                    lang,
+                );
+                pipeline
+                    .parse_only(&config)
+                    .map_err(|e| mlua::Error::external(e.to_string()))
+            })
+            .map_err(lua_err)?;
+        rustlib.set("parse_only", parse_fn).map_err(lua_err)?;
+    }
+
+    // list_parsers function
+    {
+        let parsers: Vec<(String, Vec<String>)> = pipeline
+            .list_parsers()
+            .into_iter()
+            .map(|(name, exts)| {
+                (
+                    name.to_string(),
+                    exts.iter().map(|e| e.to_string()).collect(),
+                )
+            })
+            .collect();
+        let list_fn = lua
+            .create_function(move |lua, ()| {
+                let tbl = lua.create_table()?;
+                for (i, (name, exts)) in parsers.iter().enumerate() {
+                    let entry = lua.create_table()?;
+                    entry.set("name", name.as_str())?;
+                    let ext_tbl = lua.create_table()?;
+                    for (j, ext) in exts.iter().enumerate() {
+                        ext_tbl.set(j + 1, ext.as_str())?;
+                    }
+                    entry.set("extensions", ext_tbl)?;
+                    tbl.set(i + 1, entry)?;
+                }
+                Ok(tbl)
+            })
+            .map_err(lua_err)?;
+        rustlib.set("list_parsers", list_fn).map_err(lua_err)?;
+    }
+
+    // check_git function (verify git repo is accessible)
+    {
+        let repo_path = pipeline.repo_path().to_path_buf();
+        let check_git_fn = lua
+            .create_function(move |lua, ()| {
+                let tbl = lua.create_table()?;
+                tbl.set("path", repo_path.to_string_lossy().as_ref())?;
+                match git2::Repository::open(&repo_path) {
+                    Ok(_) => {
+                        tbl.set("ok", true)?;
+                    }
+                    Err(e) => {
+                        tbl.set("ok", false)?;
+                        tbl.set("error", e.message().to_string())?;
+                    }
+                }
+                Ok(tbl)
+            })
+            .map_err(lua_err)?;
+        rustlib.set("check_git", check_git_fn).map_err(lua_err)?;
+    }
 
     // Set global
     lua.globals().set("__rustlib", rustlib).map_err(lua_err)?;
