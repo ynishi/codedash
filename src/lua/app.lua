@@ -11,7 +11,7 @@ local codedash = require("codedash")
 
 local app = sen.app("codedash", "Code metrics visualization")
     :command("analyze", "Analyze a codebase and produce metrics report")
-        :arg("path", "Source directory to analyze")
+        :arg("path", "Source directory to analyze (default: .)", { required = false })
         :option("l", "lang", "Language: rust, typescript", { default = "rust" })
         :option("o", "output", "Output format: report, json", { default = "report" })
         :option("t", "top", "Show top N entries", { default = "10" })
@@ -19,11 +19,11 @@ local app = sen.app("codedash", "Code metrics visualization")
         :option("d", "domain", "Filter output to a specific domain")
         :done()
     :command("parse", "Parse source files without enrichment or evaluation")
-        :arg("path", "Source directory to parse")
+        :arg("path", "Source directory to parse (default: .)", { required = false })
         :option("l", "lang", "Language: rust, typescript", { default = "rust" })
         :done()
     :command("graph", "Show dependency graph from import edges")
-        :arg("path", "Source directory to analyze")
+        :arg("path", "Source directory to analyze (default: .)", { required = false })
         :option("l", "lang", "Language: rust, typescript", { default = "rust" })
         :option("f", "format", "Output format: dot, mermaid", { default = "dot" })
         :done()
@@ -32,7 +32,7 @@ local app = sen.app("codedash", "Code metrics visualization")
     :command("config-init", "Generate a .codedash.lua template in current directory")
         :done()
     :command("check-health", "Diagnose parser, git, and config status")
-        :arg("path", "Source directory to check", { required = false })
+        :arg("path", "Source directory to check (default: .)", { required = false })
         :option("l", "lang", "Language: rust, typescript", { default = "rust" })
         :done()
 
@@ -132,7 +132,7 @@ end
 -- Analyze route
 -- ================================================================
 app:route("analyze", function(ctx)
-  local path = ctx.args.path
+  local path = ctx.args.path or "."
   local lang = ctx.args.lang or "rust"
   local output_format = ctx.args.output or "report"
   local top_n = tonumber(ctx.args.top) or 10
@@ -208,7 +208,7 @@ end)
 -- Parse route (AST only, no enrichment)
 -- ================================================================
 app:route("parse", function(ctx)
-  local path = ctx.args.path
+  local path = ctx.args.path or "."
   local lang = ctx.args.lang or "rust"
 
   local json = __rustlib.parse_only(path, lang)
@@ -219,7 +219,7 @@ end)
 -- Graph route (dependency edges as DOT or mermaid)
 -- ================================================================
 app:route("graph", function(ctx)
-  local path = ctx.args.path
+  local path = ctx.args.path or "."
   local lang = ctx.args.lang or "rust"
   local fmt  = ctx.args.format or "dot"
 
