@@ -226,7 +226,23 @@ app:route("graph", function(ctx)
   local json = __rustlib.parse_only(path, lang)
   local ast_data = __rustlib.json.decode(json)
 
-  local edges = ast_data.edges or {}
+  -- Normalize: strip leading "src/" for cleaner graph node names
+  local function strip_src(p)
+    return p:match("^src/(.+)") or p
+  end
+
+  -- Filter out unresolvable edges and normalize paths
+  local raw_edges = ast_data.edges or {}
+  local edges = {}
+  for _, e in ipairs(raw_edges) do
+    if e.to_file and e.to_file ~= "" and e.to_file ~= "crate" then
+      edges[#edges + 1] = {
+        from_file = strip_src(e.from_file),
+        to_file   = strip_src(e.to_file),
+        symbol    = e.symbol,
+      }
+    end
+  end
   if #edges == 0 then
     return sen.ok("No edges found (no internal imports detected).")
   end

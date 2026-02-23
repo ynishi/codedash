@@ -63,7 +63,7 @@ impl LanguageParser for RustParser {
             git_churn_30d: None,
         };
 
-        visit_node(tree.root_node(), source, 0, None, &mut file_data);
+        visit_node(tree.root_node(), source, 0, None, &mut file_data, rel_name);
         resolve_calls(source, &file_data.imports, &mut file_data.nodes);
 
         Ok(file_data)
@@ -77,8 +77,9 @@ fn visit_node(
     depth: usize,
     impl_target: Option<&str>,
     file_data: &mut FileData,
+    rel_name: &str,
 ) {
-    if let Some(extracted) = extract_node(node, source, depth, impl_target) {
+    if let Some(extracted) = extract_node(node, source, depth, impl_target, rel_name) {
         match extracted {
             Extracted::Node(n) => file_data.nodes.push(*n),
             Extracted::Import(imp) => file_data.imports.push(imp),
@@ -99,6 +100,7 @@ fn visit_node(
             depth + 1,
             child_impl_target.as_deref().or(impl_target),
             file_data,
+            rel_name,
         );
     }
 }
@@ -113,9 +115,10 @@ fn extract_node(
     source: &str,
     depth: usize,
     impl_target: Option<&str>,
+    rel_name: &str,
 ) -> Option<Extracted> {
     match node.kind() {
-        "use_declaration" => extract_use(node, source).map(Extracted::Import),
+        "use_declaration" => extract_use(node, source, rel_name).map(Extracted::Import),
 
         "function_item" => {
             let name = name_or_anon(node, source);
@@ -422,7 +425,7 @@ fn walk_cyclomatic(node: Node, source: &str, complexity: &mut i32) {
 
 // ── Use declaration parsing ──────────────────────
 
-fn extract_use(node: Node, source: &str) -> Option<ImportInfo> {
+fn extract_use(node: Node, source: &str, rel_name: &str) -> Option<ImportInfo> {
     let text = node_text(node, source);
     let text = text.trim();
 
@@ -448,7 +451,10 @@ fn extract_use(node: Node, source: &str) -> Option<ImportInfo> {
 
     // Group import: use crate::module::{Foo, Bar}
     if let Some((base, group)) = parse_group_import(use_path) {
-        let from = normalize_use_path(base);
+        let from = normalize_use_path(base, rel_name);
+        if from.is_empty() {
+            return None;
+        }
         let names: Vec<String> = group
             .split(',')
             .filter_map(|s| {
@@ -478,7 +484,10 @@ fn extract_use(node: Node, source: &str) -> Option<ImportInfo> {
             let path = parts[0].trim();
             let alias = parts[1].trim().to_string();
             if let Some(pos) = path.rfind("::") {
-                let from = normalize_use_path(&path[..pos]);
+                let from = normalize_use_path(&path[..pos], rel_name);
+                if from.is_empty() {
+                    return None;
+                }
                 return Some(ImportInfo {
                     from,
                     names: vec![alias],
@@ -489,7 +498,10 @@ fn extract_use(node: Node, source: &str) -> Option<ImportInfo> {
 
     // Simple import: use crate::module::Type
     if let Some(pos) = use_path.rfind("::") {
-        let from = normalize_use_path(&use_path[..pos]);
+        let from = normalize_use_path(&use_path[..pos], rel_name);
+        if from.is_empty() {
+            return None;
+        }
         let name = use_path[pos + 2..].to_string();
         return Some(ImportInfo {
             from,
@@ -508,16 +520,67 @@ fn parse_group_import(use_path: &str) -> Option<(&str, &str)> {
     Some((base, group))
 }
 
-fn normalize_use_path(path: &str) -> String {
-    if let Some(rest) = path.strip_prefix("crate::") {
-        rest.replace("::", "/")
-    } else if let Some(rest) = path.strip_prefix("super::") {
-        format!("../{}", rest.replace("::", "/"))
-    } else if let Some(rest) = path.strip_prefix("self::") {
-        format!("./{}", rest.replace("::", "/"))
-    } else {
-        path.replace("::", "/")
+/// Resolve a use-path to a crate-relative module path.
+///
+/// `rel_name` is the current file's relative name (e.g., `domain/config` for
+/// `src/domain/config.rs`). It is needed to resolve `super::` and `self::`.
+fn normalize_use_path(path: &str, rel_name: &str) -> String {
+    // Bare "crate" — top-level re-export, no specific module
+    if path == "crate" {
+        return String::new();
     }
+    if let Some(rest) = path.strip_prefix("crate::") {
+        return rest.replace("::", "/");
+    }
+
+    // super:: — resolve relative to parent module
+    if path == "super" {
+        return resolve_super(rel_name).to_string();
+    }
+    if let Some(rest) = path.strip_prefix("super::") {
+        let parent = resolve_super(rel_name);
+        let resolved = rest.replace("::", "/");
+        if parent.is_empty() {
+            return resolved;
+        }
+        return format!("{parent}/{resolved}");
+    }
+
+    // self:: — resolve relative to current module
+    if path == "self" {
+        return resolve_self(rel_name).to_string();
+    }
+    if let Some(rest) = path.strip_prefix("self::") {
+        let current = resolve_self(rel_name);
+        let resolved = rest.replace("::", "/");
+        if current.is_empty() {
+            return resolved;
+        }
+        return format!("{current}/{resolved}");
+    }
+
+    path.replace("::", "/")
+}
+
+/// Module path that `super` refers to from the given file's rel_name.
+///
+/// - `domain/config` → `domain` (parent of module `domain::config`)
+/// - `infra/parser/rust` → `infra/parser`
+/// - `domain/mod` → `""` (mod.rs defines `domain`; its parent is crate root)
+/// - `main` → `""` (top-level; parent is crate root)
+fn resolve_super(rel_name: &str) -> &str {
+    let module_path = rel_name.strip_suffix("/mod").unwrap_or(rel_name);
+    module_path
+        .rsplit_once('/')
+        .map_or("", |(parent, _)| parent)
+}
+
+/// Module path that `self` refers to from the given file's rel_name.
+///
+/// - `domain/config` → `domain/config`
+/// - `domain/mod` → `domain` (mod.rs IS the directory module)
+fn resolve_self(rel_name: &str) -> &str {
+    rel_name.strip_suffix("/mod").unwrap_or(rel_name)
 }
 
 // ── Call resolution ──────────────────────────────
@@ -741,5 +804,102 @@ mod tests {
         let node = &result.nodes[0];
         assert_eq!(node.is_async, Some(true));
         assert_eq!(node.is_unsafe, Some(true));
+    }
+
+    // ── Import resolution with rel_name ──
+
+    fn parse_rust_as(source: &str, rel_name: &str) -> FileData {
+        let parser = RustParser::new();
+        parser.parse_source(source, "test.rs", rel_name).unwrap()
+    }
+
+    #[test]
+    fn use_crate_error_skipped() {
+        // `use crate::Error` has no module path — should be filtered out
+        let result = parse_rust("use crate::Error;");
+        assert!(result.imports.is_empty());
+    }
+
+    #[test]
+    fn use_crate_group_at_root_skipped() {
+        let result = parse_rust("use crate::{Error, Result};");
+        assert!(result.imports.is_empty());
+    }
+
+    #[test]
+    fn use_super_resolves_to_parent() {
+        let result = parse_rust_as("use super::enrichment::Enricher;", "domain/config");
+        assert_eq!(result.imports.len(), 1);
+        assert_eq!(result.imports[0].from, "domain/enrichment");
+        assert_eq!(result.imports[0].names, vec!["Enricher"]);
+    }
+
+    #[test]
+    fn use_super_from_deep_module() {
+        let result = parse_rust_as("use super::registry::ParserRegistry;", "infra/parser/rust");
+        assert_eq!(result.imports.len(), 1);
+        assert_eq!(result.imports[0].from, "infra/parser/registry");
+    }
+
+    #[test]
+    fn use_super_from_mod_rs() {
+        // mod.rs defines the directory module; super goes to its parent
+        let result = parse_rust_as("use super::other::Foo;", "domain/mod");
+        assert_eq!(result.imports.len(), 1);
+        assert_eq!(result.imports[0].from, "other");
+    }
+
+    #[test]
+    fn use_super_from_top_level() {
+        let result = parse_rust_as("use super::sibling::Bar;", "main");
+        assert_eq!(result.imports.len(), 1);
+        assert_eq!(result.imports[0].from, "sibling");
+    }
+
+    #[test]
+    fn use_super_group_import() {
+        let result = parse_rust_as("use super::types::{Config, Error};", "domain/config");
+        assert_eq!(result.imports.len(), 1);
+        assert_eq!(result.imports[0].from, "domain/types");
+        assert_eq!(result.imports[0].names.len(), 2);
+    }
+
+    #[test]
+    fn use_self_resolves_to_current() {
+        let result = parse_rust_as("use self::sub::Widget;", "ui/panel");
+        assert_eq!(result.imports.len(), 1);
+        assert_eq!(result.imports[0].from, "ui/panel/sub");
+    }
+
+    // ── resolve_super / resolve_self unit tests ──
+
+    #[test]
+    fn resolve_super_nested() {
+        assert_eq!(resolve_super("domain/config"), "domain");
+    }
+
+    #[test]
+    fn resolve_super_deep() {
+        assert_eq!(resolve_super("infra/parser/rust"), "infra/parser");
+    }
+
+    #[test]
+    fn resolve_super_mod_rs() {
+        assert_eq!(resolve_super("domain/mod"), "");
+    }
+
+    #[test]
+    fn resolve_super_top_level() {
+        assert_eq!(resolve_super("main"), "");
+    }
+
+    #[test]
+    fn resolve_self_regular_file() {
+        assert_eq!(resolve_self("domain/config"), "domain/config");
+    }
+
+    #[test]
+    fn resolve_self_mod_rs() {
+        assert_eq!(resolve_self("domain/mod"), "domain");
     }
 }
