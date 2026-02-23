@@ -39,6 +39,10 @@ codedash analyze -d core
 # Generate interactive HTML dependency map
 codedash view
 
+# With coverage data (cargo-llvm-cov --json output)
+codedash analyze --cov-file coverage.json -o json
+codedash view --cov-file coverage.json
+
 # Show dependency graph (DOT format)
 codedash graph
 
@@ -87,6 +91,7 @@ Patterns use **substring matching** against node name, file path, and short name
 Source code
   → tree-sitter AST parsing (Rust)
     → Git enrichment (churn, co-change)
+    → Coverage enrichment (--cov-file, llvm-cov JSON)
       → Lua DSL evaluation
         → Visual output (report / JSON / HTML)
 ```
@@ -117,6 +122,19 @@ Index (what to measure)  →  Normalizer [0,1]  →  Percept (how to perceive)
 | params | border | Many params → thick border |
 | depth | opacity | Deep nesting → faded |
 | coverage | clarity | Low coverage → dim |
+
+### HTML View Encoding (`codedash view`)
+
+| Visual Channel | Data Source | Mapping |
+|----------------|-------------|---------|
+| Circle size | Lines of code | More lines → larger |
+| Circle color | Domain | Auto-assigned palette |
+| Inner ring color | Cyclomatic complexity | Green (low) → Red (high) |
+| Inner ring width | Max cyclomatic | Higher → thicker |
+| Outer ring (amber) | Git churn (30d) | More changes → wider |
+| Badge (shield) | Coverage | Green ≥70%, Yellow ≥40%, Red <40% |
+| Badge (gray ?) | Coverage N/A | No coverage data for this module |
+| Edges | Import dependencies | Arrows between modules |
 
 ## Customizing the DSL
 
