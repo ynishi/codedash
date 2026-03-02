@@ -1,5 +1,8 @@
 # codedash
 
+![complexity](./badges/complexity.svg)
+![modules](./badges/modules.svg)
+
 Code metrics visualization CLI — parse, enrich, and map code structure to visual perceptions.
 
 codedash analyzes source code via tree-sitter AST parsing, enriches it with git history, and transforms structural metrics (lines, complexity, churn, depth) into visual parameters (color, size, opacity) through a declarative Lua DSL pipeline.

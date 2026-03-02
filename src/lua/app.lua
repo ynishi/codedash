@@ -39,6 +39,15 @@ local app = sen.app("codedash", "Code metrics visualization")
         :option("c", "config", "Config file path (.codedash.lua)")
         :option("", "cov-file", "Coverage JSON (cargo llvm-cov --json --output-path FILE)")
         :done()
+    :command("badge", "Generate shields.io badge files (JSON endpoint or SVG)")
+        :arg("path", "Source directory (default: .)", { required = false })
+        :option("o", "out-dir", "Output directory for badge files", { default = "./badges" })
+        :option("l", "lang", "Language: rust, typescript", { default = "rust" })
+        :option("f", "format", "Badge format: shields-endpoint, svg", { default = "shields-endpoint" })
+        :option("c", "config", "Config file path (.codedash.lua)")
+        :option("", "cov-file", "Coverage JSON (cargo llvm-cov --json --output-path FILE)")
+        :option("", "only", "Comma-separated filter: coverage,fn-coverage,complexity,modules")
+        :done()
     :command("check-health", "Diagnose parser, git, and config status")
         :arg("path", "Source directory to check (default: .)", { required = false })
         :option("l", "lang", "Language: rust, typescript", { default = "rust" })
@@ -518,6 +527,48 @@ app:route("view", function(ctx)
 
   return sen.ok(string.format("Wrote %s (%d modules, %d code units, %d edges)",
     out_path, module_count, #r.entries, #(ast_data.edges or {})))
+end)
+
+-- ================================================================
+-- Badge route (shields.io endpoint JSON generation)
+-- ================================================================
+app:route("badge", function(ctx)
+  local path = ctx.args.path or "."
+  local lang = ctx.args.lang or "rust"
+  local out_dir = ctx.args["out-dir"] or "./badges"
+  local badge_format = ctx.args.format or "shields-endpoint"
+  local config_path = ctx.args.config
+  local cov_file = ctx.args["cov-file"]
+  local only_filter = ctx.args["only"]
+
+  -- Build opts table for Rust
+  local opts = {}
+  opts.format = badge_format
+  if cov_file then
+    opts.coverage_file = cov_file
+  end
+  if only_filter then
+    opts.only = only_filter
+  end
+
+  -- Load .codedash.lua for badge thresholds
+  local config = resolve_config(config_path)
+  if config and config.badges then
+    opts.thresholds = config.badges
+  end
+
+  local result = __rustlib.generate_badges(path, lang, out_dir, opts)
+
+  if result.count == 0 then
+    return sen.ok("No badges generated (no matching data found)")
+  end
+
+  local lines = {}
+  lines[#lines+1] = string.format("Generated %d badge(s) in %s/", result.count, out_dir)
+  for _, f in ipairs(result.files) do
+    lines[#lines+1] = "  " .. f
+  end
+  return sen.ok(table.concat(lines, "\n"))
 end)
 
 -- ================================================================
