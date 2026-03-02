@@ -156,6 +156,113 @@ pub fn inject_rustlib(lua: &mlua::Lua, pipeline: Arc<AnalyzePipeline>) -> Result
         rustlib.set("check_git", check_git_fn).map_err(lua_err)?;
     }
 
+    // generate_badges function
+    // Signature: generate_badges(path, lang, out_dir [, opts_table])
+    //   opts_table = {
+    //     coverage_file = "path/to/coverage.json",
+    //     only = "coverage,complexity",  -- comma-separated filter
+    //     thresholds = { coverage = { green = 80, yellow = 60 }, ... }
+    //   }
+    // Returns: Lua table { files = { "path1", "path2", ... }, count = N }
+    {
+        let pipeline = Arc::clone(&pipeline);
+        let badge_fn = lua
+            .create_function(
+                move |lua,
+                      (path, lang, out_dir, opts): (
+                    String,
+                    String,
+                    String,
+                    Option<mlua::Table>,
+                )| {
+                    use crate::app::badge::{write_badges, BadgeGenerator};
+                    use crate::domain::badge::{
+                        BadgeFormat, BadgeMetric, BadgeThresholds, ComplexityThreshold,
+                        PercentThreshold,
+                    };
+
+                    let mut config = crate::domain::config::AnalyzeConfig::new(
+                        std::path::PathBuf::from(&path),
+                        lang,
+                    );
+
+                    let mut thresholds = BadgeThresholds::default();
+                    let mut filter: Option<Vec<BadgeMetric>> = None;
+                    let mut format = BadgeFormat::default();
+
+                    if let Some(ref opts) = opts {
+                        if let Ok(cov_file) = opts.get::<String>("coverage_file") {
+                            config.enrich.coverage_file = Some(cov_file);
+                        }
+                        if let Ok(only) = opts.get::<String>("only") {
+                            filter = Some(BadgeMetric::parse_filter(&only));
+                        }
+                        if let Ok(fmt_str) = opts.get::<String>("format") {
+                            if let Some(f) = BadgeFormat::parse(&fmt_str) {
+                                format = f;
+                            }
+                        }
+                        if let Ok(th_table) = opts.get::<mlua::Table>("thresholds") {
+                            if let Ok(cov) = th_table.get::<mlua::Table>("coverage") {
+                                if let (Ok(g), Ok(y)) =
+                                    (cov.get::<f64>("green"), cov.get::<f64>("yellow"))
+                                {
+                                    thresholds.coverage = PercentThreshold {
+                                        green: g,
+                                        yellow: y,
+                                    };
+                                }
+                            }
+                            if let Ok(fn_cov) = th_table.get::<mlua::Table>("fn_coverage") {
+                                if let (Ok(g), Ok(y)) =
+                                    (fn_cov.get::<f64>("green"), fn_cov.get::<f64>("yellow"))
+                                {
+                                    thresholds.fn_coverage = PercentThreshold {
+                                        green: g,
+                                        yellow: y,
+                                    };
+                                }
+                            }
+                            if let Ok(cx) = th_table.get::<mlua::Table>("complexity") {
+                                if let (Ok(g), Ok(y)) =
+                                    (cx.get::<f64>("green"), cx.get::<f64>("yellow"))
+                                {
+                                    thresholds.complexity = ComplexityThreshold {
+                                        green: g,
+                                        yellow: y,
+                                    };
+                                }
+                            }
+                        }
+                    }
+
+                    let metrics = filter.unwrap_or_else(BadgeMetric::all);
+
+                    let ast_data = pipeline
+                        .run_raw(&config)
+                        .map_err(|e| mlua::Error::external(e.to_string()))?;
+
+                    let generator = BadgeGenerator::new(thresholds);
+                    let badges = generator.generate(&ast_data, &metrics);
+
+                    let out_path = std::path::Path::new(&out_dir);
+                    let written = write_badges(&badges, out_path, format)
+                        .map_err(|e| mlua::Error::external(e.to_string()))?;
+
+                    let result = lua.create_table()?;
+                    let files_tbl = lua.create_table()?;
+                    for (i, f) in written.iter().enumerate() {
+                        files_tbl.set(i + 1, f.as_str())?;
+                    }
+                    result.set("files", files_tbl)?;
+                    result.set("count", written.len() as i64)?;
+                    Ok(result)
+                },
+            )
+            .map_err(lua_err)?;
+        rustlib.set("generate_badges", badge_fn).map_err(lua_err)?;
+    }
+
     // Set global
     lua.globals().set("__rustlib", rustlib).map_err(lua_err)?;
 

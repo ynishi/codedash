@@ -79,8 +79,8 @@ impl AnalyzePipeline {
         Ok(json)
     }
 
-    /// Run the full pipeline: discover files → parse → enrich → JSON string.
-    pub fn run(&self, config: &AnalyzeConfig) -> Result<String, Error> {
+    /// Run the full pipeline: discover files → parse → enrich → return AstData.
+    pub fn run_raw(&self, config: &AnalyzeConfig) -> Result<AstData, Error> {
         let parser = self
             .registry
             .for_name(&config.lang)
@@ -125,7 +125,12 @@ impl AnalyzePipeline {
         };
         self.enricher.enrich(&mut ast_data, &config.enrich, &ctx)?;
 
-        // Serialize to JSON (compatible with codedash Lua eval)
+        Ok(ast_data)
+    }
+
+    /// Run the full pipeline and serialize to JSON string.
+    pub fn run(&self, config: &AnalyzeConfig) -> Result<String, Error> {
+        let ast_data = self.run_raw(config)?;
         let json = serde_json::to_string(&ast_data)?;
         Ok(json)
     }
