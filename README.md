@@ -175,6 +175,15 @@ bind { idx.churn, pct.hue, normalize = "rank" }
 | `percentile` | p10/p90 range, linear interpolation | Normally distributed data |
 | `rank` | Rank-based, average ties | Skewed distributions |
 
+## CI Integration
+
+codedash integrates with GitHub Actions to automate metrics tracking:
+
+- **Metrics Dashboard** — Deploy an interactive module map, coverage report, and benchmark results to GitHub Pages on every push to `main`
+- **PR Metrics Comment** — Post a summary table (coverage, complexity hotspots, domain breakdown) as a sticky comment on each pull request
+
+See [docs/ci-setup.md](docs/ci-setup.md) for step-by-step setup instructions and ready-to-use workflow templates.
+
 ## Supported Languages
 
 | Language | Extensions |
