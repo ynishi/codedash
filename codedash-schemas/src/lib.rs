@@ -423,6 +423,17 @@ mod tests {
     }
 }
 
+#[cfg(all(test, feature = "schema"))]
+mod schema_snapshot {
+    use super::*;
+
+    #[test]
+    fn ast_data_json_schema() {
+        let schema = schemars::schema_for!(AstData);
+        insta::assert_json_snapshot!("ast-data-schema", schema);
+    }
+}
+
 #[cfg(test)]
 mod proptests {
     use super::*;

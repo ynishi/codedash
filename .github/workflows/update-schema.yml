@@ -1,0 +1,39 @@
+name: Update JSON Schema
+
+on:
+  pull_request:
+    paths:
+      - "codedash-schemas/**"
+
+permissions:
+  contents: write
+
+jobs:
+  update-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Generate JSON Schema
+        run: |
+          cargo run -p codedash-schemas --example generate_schema --features schema \
+            2>/dev/null > codedash-schemas/schema/ast-data.schema.json
+
+      - name: Verify insta snapshots
+        run: cargo test -p codedash-schemas --features schema
+
+      - name: Commit updated schema if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add codedash-schemas/schema/
+          git diff --cached --quiet && exit 0
+          git commit -m "ci: update JSON Schema"
+          git push

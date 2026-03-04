@@ -73,9 +73,25 @@ for file in &data.files {
 }
 ```
 
-### JSON Schema generation
+### JSON Schema (non-Rust consumers)
 
-Enable the `schema` feature to derive `schemars::JsonSchema`:
+A pre-generated JSON Schema file is available at:
+
+```
+codedash-schemas/schema/ast-data.schema.json
+```
+
+Non-Rust consumers (TypeScript, Python, Go, etc.) can use this file for validation or type generation:
+
+- **TypeScript**: generate interfaces via `json-schema-to-typescript`
+- **Python**: generate Pydantic models via `datamodel-code-generator`
+- **Go**: generate structs via `go-jsonschema`
+
+The schema file is kept up-to-date by CI. When a PR touches `codedash-schemas/`, GitHub Actions regenerates the JSON Schema and auto-commits any diff.
+
+#### Generating from Rust
+
+Enable the `schema` feature to derive `schemars::JsonSchema` on all types.
 
 ```toml
 [dependencies]
@@ -86,10 +102,15 @@ schemars = "1"
 ```rust
 let schema = schemars::schema_for!(codedash_schemas::AstData);
 let json = serde_json::to_string_pretty(&schema).unwrap();
-std::fs::write("codedash-schema.json", json).unwrap();
+std::fs::write("ast-data.schema.json", json).unwrap();
 ```
 
-The generated JSON Schema can be used by any language — TypeScript, Python, Go, etc. — to validate or generate types for codedash output.
+To regenerate locally, run the bundled example:
+
+```sh
+cargo run -p codedash-schemas --example generate_schema --features schema \
+  > codedash-schemas/schema/ast-data.schema.json
+```
 
 ## Types
 
