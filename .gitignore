@@ -2,7 +2,8 @@
 *.swo
 *~
 .DS_Store
-workspace/
+workspace
+codedash-schemas/Cargo.lock
 .claude/
 *.rock
 tools/node_modules/
