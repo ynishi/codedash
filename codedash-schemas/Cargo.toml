@@ -1,6 +1,6 @@
 [package]
 name = "codedash-schemas"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.80"
 description = "Stable public schema for codedash code metrics output — JSON Schema + Rust types"
