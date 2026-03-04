@@ -47,6 +47,10 @@
 //! - **`schema`** — derives [`schemars::JsonSchema`] on all types, enabling
 //!   JSON Schema generation via `schemars::schema_for!`.
 
+pub mod analyze;
+
+pub use analyze::{AnalyzeResult, Binding, EvalEntry, Group, PerceptValues};
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};

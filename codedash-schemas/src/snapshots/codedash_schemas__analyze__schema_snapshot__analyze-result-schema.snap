@@ -1,0 +1,258 @@
+---
+source: codedash-schemas/src/analyze.rs
+expression: schema
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnalyzeResult",
+  "description": "Top-level output from `codedash analyze -o json`.\n\nContains evaluated entries with both raw metrics and visual encoding\nvalues, plus metadata (bindings, groups, totals).",
+  "type": "object",
+  "properties": {
+    "bindings": {
+      "description": "Metric-to-percept bindings defining how code metrics map to visual channels.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Binding"
+      }
+    },
+    "entries": {
+      "description": "Evaluated code units with raw metrics and visual encoding values.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvalEntry"
+      }
+    },
+    "excluded": {
+      "description": "Number of excluded nodes.",
+      "type": "integer",
+      "format": "uint32",
+      "default": 0,
+      "minimum": 0
+    },
+    "groups": {
+      "description": "Domain groups with count and percentage.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Group"
+      }
+    },
+    "total": {
+      "description": "Total number of analyzed nodes.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "bindings",
+    "entries",
+    "total"
+  ],
+  "$defs": {
+    "Binding": {
+      "description": "A binding maps a code metric (index) to a visual channel (percept).\n\nFor example, `{ index: \"cyclomatic\", percept: \"hue\" }` means cyclomatic\ncomplexity is encoded as the hue channel in the visualization.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "description": "Metric name (e.g. `\"cyclomatic\"`, `\"lines\"`, `\"params\"`, `\"depth\"`, `\"coverage\"`).",
+          "type": "string"
+        },
+        "percept": {
+          "description": "Visual channel name (e.g. `\"hue\"`, `\"size\"`, `\"border\"`, `\"opacity\"`, `\"clarity\"`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "percept"
+      ]
+    },
+    "EvalEntry": {
+      "description": "A single evaluated code unit with raw metrics and visual encoding values.\n\nCombines source identity, raw metrics from AST parsing/enrichment, and\nthe normalized + percept values computed by the eval pipeline.",
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "description": "Region coverage ratio (0.0–1.0).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "cyclomatic": {
+          "description": "Cyclomatic complexity.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "depth": {
+          "description": "Maximum nesting depth.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end_line": {
+          "description": "Last line of the node (1-based, inclusive).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "exported": {
+          "description": "Whether this node is exported / publicly visible.",
+          "type": "boolean",
+          "default": false
+        },
+        "field_count": {
+          "description": "Number of fields (structs/enums).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "file": {
+          "description": "Source file path (relative, without extension).",
+          "type": "string"
+        },
+        "full_name": {
+          "description": "Fully qualified name (e.g. `\"src/app::MyStruct.method\"`).",
+          "type": "string"
+        },
+        "git_churn_30d": {
+          "description": "Git commit count within the churn period.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "Node kind: `\"function\"`, `\"struct\"`, `\"enum\"`, `\"impl\"`, `\"method\"`, etc.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "Total line count.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "description": "Node name (identifier).",
+          "type": "string"
+        },
+        "normalized": {
+          "description": "Normalized values (0.0–1.0 range) for each percept channel.",
+          "$ref": "#/$defs/PerceptValues"
+        },
+        "params": {
+          "description": "Number of parameters (functions/methods).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "percept": {
+          "description": "Final percept values after mapping (may exceed 0.0–1.0 depending on the percept).",
+          "$ref": "#/$defs/PerceptValues"
+        },
+        "start_line": {
+          "description": "First line of the node (1-based).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "visibility": {
+          "description": "Visibility qualifier (e.g. `\"pub\"`, `\"private\"`).",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "full_name",
+        "file",
+        "start_line",
+        "end_line",
+        "lines",
+        "normalized",
+        "percept"
+      ]
+    },
+    "Group": {
+      "description": "A domain group with count and percentage.\n\nGroups categorize analyzed nodes by their containing module/domain.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "Number of nodes in this group.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "description": "Group name (e.g. domain/module name).",
+          "type": "string"
+        },
+        "pct": {
+          "description": "Percentage of total nodes (0.0–100.0).",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "name",
+        "count",
+        "pct"
+      ]
+    },
+    "PerceptValues": {
+      "description": "Visual encoding values computed by the eval pipeline.\n\nEach field corresponds to a percept channel. The `hue`, `size`, `border`,\nand `opacity` channels are always present. The `clarity` channel is only\npresent when coverage data is available.",
+      "type": "object",
+      "properties": {
+        "border": {
+          "description": "Border channel value (mapped from params by default).",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "clarity": {
+          "description": "Clarity channel value (mapped from coverage when available).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "hue": {
+          "description": "Hue channel value (mapped from cyclomatic complexity by default).",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "opacity": {
+          "description": "Opacity channel value (mapped from depth by default).",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "size": {
+          "description": "Size channel value (mapped from lines by default).",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        }
+      }
+    }
+  }
+}
