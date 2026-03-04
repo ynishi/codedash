@@ -1,3 +1,6 @@
+[workspace]
+members = ["codedash-schemas"]
+
 [package]
 name = "codedash"
 version = "0.1.2"
@@ -15,6 +18,7 @@ exclude = [
     "paths.lua",
     "rustlib.json",
     "codedash-*.rockspec",
+    "codedash-schemas/",
     "examples/",
     "spec/",
     "tools/",
@@ -43,6 +47,9 @@ git2 = { version = "0.20", features = ["vendored-libgit2"] }
 
 # Lua runtime (direct dependency for rustlib.rs)
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
+
+# Public schema (ACL boundary — domain model is internal)
+codedash-schemas = { path = "codedash-schemas" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

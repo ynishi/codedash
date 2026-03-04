@@ -1,0 +1,296 @@
+---
+source: codedash-schemas/src/lib.rs
+expression: schema
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AstData",
+  "description": "Top-level AST output from a codedash analysis run.",
+  "type": "object",
+  "properties": {
+    "edges": {
+      "description": "Dependency edges between files.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Edge"
+      }
+    },
+    "files": {
+      "description": "Analyzed source files.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FileData"
+      }
+    }
+  },
+  "required": [
+    "files"
+  ],
+  "$defs": {
+    "CallInfo": {
+      "description": "A call reference from a function body to an imported symbol.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "Number of call sites within the function body.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "module": {
+          "description": "Module the symbol belongs to.",
+          "type": "string"
+        },
+        "symbol": {
+          "description": "Called symbol name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol",
+        "module",
+        "count"
+      ]
+    },
+    "Edge": {
+      "description": "A dependency edge between two files.",
+      "type": "object",
+      "properties": {
+        "from_file": {
+          "description": "Source file (the file that imports).",
+          "type": "string"
+        },
+        "symbol": {
+          "description": "Imported symbol name.",
+          "type": "string"
+        },
+        "to_file": {
+          "description": "Target file (the file being imported from).",
+          "type": "string"
+        },
+        "type": {
+          "description": "Edge type (currently always `\"import\"`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_file",
+        "to_file",
+        "symbol",
+        "type"
+      ]
+    },
+    "FileData": {
+      "description": "Per-file AST data.",
+      "type": "object",
+      "properties": {
+        "git_churn_30d": {
+          "description": "Git commit count within the churn period. Injected by enrichment.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "imports": {
+          "description": "Internal imports (`use crate::...`, `use super::...`).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ImportInfo"
+          }
+        },
+        "name": {
+          "description": "Normalized module name (e.g. `\"app/analyze\"`).",
+          "type": "string"
+        },
+        "nodes": {
+          "description": "AST nodes (functions, structs, enums, etc.) found in this file.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodeData"
+          }
+        },
+        "path": {
+          "description": "Original file path (relative to the analysis root).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name",
+        "nodes"
+      ]
+    },
+    "ImportInfo": {
+      "description": "An internal import (e.g. `use crate::domain::ast::AstData`).",
+      "type": "object",
+      "properties": {
+        "from": {
+          "description": "Source module path.",
+          "type": "string"
+        },
+        "names": {
+          "description": "Imported symbol names.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "from",
+        "names"
+      ]
+    },
+    "NodeData": {
+      "description": "A single AST node (function, struct, enum, impl, etc.).",
+      "type": "object",
+      "properties": {
+        "calls": {
+          "description": "Internal function calls detected in the body.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/CallInfo"
+          }
+        },
+        "co_changes": {
+          "description": "Co-change counts: `\"partner_file::*\" → commit_count`.\nInjected by enrichment.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "coverage": {
+          "description": "Region coverage ratio (0.0–1.0). Injected by enrichment.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "cyclomatic": {
+          "description": "Cyclomatic complexity.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "depth": {
+          "description": "Maximum nesting depth.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end_line": {
+          "description": "Last line of the node (1-based, inclusive).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "exported": {
+          "description": "Whether this node is exported / publicly visible.",
+          "type": "boolean",
+          "default": false
+        },
+        "field_count": {
+          "description": "Number of fields (structs/enums only).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "git_churn_30d": {
+          "description": "Git commit count within the churn period. Injected by enrichment.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "is_async": {
+          "description": "Whether this function is `async`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "is_unsafe": {
+          "description": "Whether this function/trait is `unsafe`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Node kind: `\"function\"`, `\"struct\"`, `\"enum\"`, `\"impl\"`, `\"method\"`, etc.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "Total line count (`end_line - start_line + 1`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "description": "Node name (identifier).",
+          "type": "string"
+        },
+        "params": {
+          "description": "Number of parameters (functions/methods only).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "start_line": {
+          "description": "First line of the node (1-based).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "trait_name": {
+          "description": "Trait name for impl blocks (e.g. `\"Display\"`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "description": "Visibility qualifier (e.g. `\"pub\"`, `\"pub(crate)\"`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "start_line",
+        "end_line",
+        "lines"
+      ]
+    }
+  }
+}

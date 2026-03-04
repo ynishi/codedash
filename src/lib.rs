@@ -1,3 +1,23 @@
+//! codedash — code metrics visualization CLI.
+//!
+//! # Architecture
+//!
+//! codedash follows a hexagonal architecture with an Anti-Corruption Layer (ACL):
+//!
+//! - **[`domain`]** — Internal model (`domain::ast`, `domain::config`). May change freely.
+//! - **[`port`]** — Boundaries. [`port::schema`] converts domain types to the stable
+//!   [`codedash_schemas`] public contract. [`port::parser`] and [`port::enricher`] define traits.
+//! - **[`infra`]** — Implementations (tree-sitter parsers, git enrichment).
+//! - **[`app`]** — Use cases ([`app::analyze::AnalyzePipeline`]).
+//! - **[`cli`]** — CLI presentation layer.
+//!
+//! ## Public schema boundary
+//!
+//! JSON output is serialized from [`codedash_schemas`] types, **not** from the internal
+//! domain model. The conversion happens in [`port::schema`] via `From` implementations.
+//! This ensures external consumers (GUIs, dashboards, CI tools) depend on a stable contract
+//! that is decoupled from internal refactoring.
+
 pub mod app;
 pub mod cli;
 pub mod domain;
