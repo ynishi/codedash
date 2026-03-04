@@ -1,0 +1,24 @@
+[package]
+name = "codedash-schemas"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Stable public schema for codedash code metrics output — JSON Schema + Rust types"
+license = "MIT"
+repository = "https://github.com/ynishi/codedash"
+readme = "README.md"
+keywords = ["code-metrics", "ast", "schema", "json-schema"]
+categories = ["data-structures", "development-tools"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+# Optional: JSON Schema generation
+schemars = { version = "1", optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+default = []
+schema = ["dep:schemars"]

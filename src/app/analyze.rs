@@ -75,7 +75,9 @@ impl AnalyzePipeline {
 
         build_edges(&mut ast_data);
 
-        let json = serde_json::to_string(&ast_data)?;
+        // ACL: domain → public schema at serialization boundary
+        let schema: codedash_schemas::AstData = ast_data.into();
+        let json = serde_json::to_string(&schema)?;
         Ok(json)
     }
 
@@ -129,9 +131,14 @@ impl AnalyzePipeline {
     }
 
     /// Run the full pipeline and serialize to JSON string.
+    ///
+    /// The internal domain model is converted to the public schema
+    /// ([`codedash_schemas::AstData`]) before serialization (ACL boundary).
     pub fn run(&self, config: &AnalyzeConfig) -> Result<String, Error> {
         let ast_data = self.run_raw(config)?;
-        let json = serde_json::to_string(&ast_data)?;
+        // ACL: domain → public schema at serialization boundary
+        let schema: codedash_schemas::AstData = ast_data.into();
+        let json = serde_json::to_string(&schema)?;
         Ok(json)
     }
 }

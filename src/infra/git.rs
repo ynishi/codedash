@@ -217,10 +217,8 @@ fn inject_cochange_to_reps(
         if idx < nodes.len() {
             let co = nodes[idx]
                 .co_changes
-                .get_or_insert_with(|| serde_json::json!({}));
-            if let serde_json::Value::Object(map) = co {
-                map.insert(format!("{partner_file}::*"), serde_json::json!(count));
-            }
+                .get_or_insert_with(std::collections::HashMap::new);
+            co.insert(format!("{partner_file}::*"), count);
         }
     }
 }
@@ -364,15 +362,11 @@ mod tests {
 
         apply_cochange(&mut data, &cochange);
 
-        let alpha_co = data.files[0].nodes[0].co_changes.as_ref();
-        assert!(alpha_co.is_some());
-        let alpha_map = alpha_co.unwrap().as_object().unwrap();
-        assert_eq!(alpha_map.get("beta::*").unwrap(), &serde_json::json!(3));
+        let alpha_co = data.files[0].nodes[0].co_changes.as_ref().unwrap();
+        assert_eq!(alpha_co.get("beta::*"), Some(&3));
 
-        let beta_co = data.files[1].nodes[0].co_changes.as_ref();
-        assert!(beta_co.is_some());
-        let beta_map = beta_co.unwrap().as_object().unwrap();
-        assert_eq!(beta_map.get("alpha::*").unwrap(), &serde_json::json!(3));
+        let beta_co = data.files[1].nodes[0].co_changes.as_ref().unwrap();
+        assert_eq!(beta_co.get("alpha::*"), Some(&3));
     }
 
     #[test]

@@ -1,8 +1,14 @@
-//! AST data types — compatible with parse_rust.js / parse_tsx.js output schema.
+//! Internal domain model for AST data.
+//!
+//! These types are **internal** to codedash. External consumers should use
+//! [`codedash_schemas`] instead. The conversion from domain model to public
+//! schema is handled by the ACL in [`crate::port::schema`].
+
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Top-level AST output.
+/// Top-level AST output (internal).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AstData {
     pub files: Vec<FileData>,
@@ -10,7 +16,7 @@ pub struct AstData {
     pub edges: Vec<Edge>,
 }
 
-/// Per-file AST data.
+/// Per-file AST data (internal).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileData {
     pub path: String,
@@ -23,7 +29,7 @@ pub struct FileData {
     pub git_churn_30d: Option<u32>,
 }
 
-/// A single AST node (function, struct, enum, impl, etc.).
+/// A single AST node (internal).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeData {
     pub kind: String,
@@ -61,8 +67,9 @@ pub struct NodeData {
     pub git_churn_30d: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coverage: Option<f64>,
+    /// Co-change counts: `"partner_file::*" → commit_count`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub co_changes: Option<serde_json::Value>,
+    pub co_changes: Option<HashMap<String, u32>>,
 
     /// Internal use calls detected in function bodies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
