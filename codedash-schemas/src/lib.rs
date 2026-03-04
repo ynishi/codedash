@@ -52,8 +52,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Top-level AST output from a codedash analysis run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[non_exhaustive]
 pub struct AstData {
     /// Analyzed source files.
     pub files: Vec<FileData>,
@@ -62,9 +63,17 @@ pub struct AstData {
     pub edges: Vec<Edge>,
 }
 
+impl AstData {
+    /// Create a new [`AstData`].
+    pub fn new(files: Vec<FileData>, edges: Vec<Edge>) -> Self {
+        Self { files, edges }
+    }
+}
+
 /// Per-file AST data.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[non_exhaustive]
 pub struct FileData {
     /// Original file path (relative to the analysis root).
     pub path: String,
@@ -80,9 +89,25 @@ pub struct FileData {
     pub git_churn_30d: Option<u32>,
 }
 
+impl FileData {
+    /// Create a new [`FileData`] with required fields.
+    ///
+    /// `nodes`, `imports`, and `git_churn_30d` default to empty/`None`.
+    pub fn new(path: String, name: String) -> Self {
+        Self {
+            path,
+            name,
+            nodes: Vec::new(),
+            imports: Vec::new(),
+            git_churn_30d: None,
+        }
+    }
+}
+
 /// A single AST node (function, struct, enum, impl, etc.).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[non_exhaustive]
 pub struct NodeData {
     /// Node kind: `"function"`, `"struct"`, `"enum"`, `"impl"`, `"method"`, etc.
     pub kind: String,
@@ -104,25 +129,25 @@ pub struct NodeData {
     pub is_unsafe: Option<bool>,
 
     /// First line of the node (1-based).
-    pub start_line: usize,
+    pub start_line: u32,
     /// Last line of the node (1-based, inclusive).
-    pub end_line: usize,
+    pub end_line: u32,
     /// Total line count (`end_line - start_line + 1`).
-    pub lines: usize,
+    pub lines: u32,
 
     /// Number of parameters (functions/methods only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub params: Option<usize>,
+    pub params: Option<u32>,
     /// Number of fields (structs/enums only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub field_count: Option<usize>,
+    pub field_count: Option<u32>,
     /// Maximum nesting depth.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub depth: Option<usize>,
+    pub depth: Option<u32>,
 
     /// Cyclomatic complexity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cyclomatic: Option<usize>,
+    pub cyclomatic: Option<u32>,
 
     /// Trait name for impl blocks (e.g. `"Display"`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -144,9 +169,38 @@ pub struct NodeData {
     pub calls: Option<Vec<CallInfo>>,
 }
 
+impl NodeData {
+    /// Create a new [`NodeData`] with required fields.
+    ///
+    /// All optional fields default to `None` / `false`.
+    pub fn new(kind: String, name: String, start_line: u32, end_line: u32, lines: u32) -> Self {
+        Self {
+            kind,
+            name,
+            exported: false,
+            visibility: None,
+            is_async: None,
+            is_unsafe: None,
+            start_line,
+            end_line,
+            lines,
+            params: None,
+            field_count: None,
+            depth: None,
+            cyclomatic: None,
+            trait_name: None,
+            git_churn_30d: None,
+            coverage: None,
+            co_changes: None,
+            calls: None,
+        }
+    }
+}
+
 /// An internal import (e.g. `use crate::domain::ast::AstData`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[non_exhaustive]
 pub struct ImportInfo {
     /// Source module path.
     pub from: String,
@@ -154,21 +208,41 @@ pub struct ImportInfo {
     pub names: Vec<String>,
 }
 
+impl ImportInfo {
+    /// Create a new [`ImportInfo`].
+    pub fn new(from: String, names: Vec<String>) -> Self {
+        Self { from, names }
+    }
+}
+
 /// A call reference from a function body to an imported symbol.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[non_exhaustive]
 pub struct CallInfo {
     /// Called symbol name.
     pub symbol: String,
     /// Module the symbol belongs to.
     pub module: String,
     /// Number of call sites within the function body.
-    pub count: usize,
+    pub count: u32,
+}
+
+impl CallInfo {
+    /// Create a new [`CallInfo`].
+    pub fn new(symbol: String, module: String, count: u32) -> Self {
+        Self {
+            symbol,
+            module,
+            count,
+        }
+    }
 }
 
 /// A dependency edge between two files.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[non_exhaustive]
 pub struct Edge {
     /// Source file (the file that imports).
     pub from_file: String,
@@ -179,6 +253,18 @@ pub struct Edge {
     /// Edge type (currently always `"import"`).
     #[serde(rename = "type")]
     pub edge_type: String,
+}
+
+impl Edge {
+    /// Create a new [`Edge`].
+    pub fn new(from_file: String, to_file: String, symbol: String, edge_type: String) -> Self {
+        Self {
+            from_file,
+            to_file,
+            symbol,
+            edge_type,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -310,5 +396,149 @@ mod tests {
         let json = serde_json::to_value(&edge).unwrap();
         assert!(json.get("type").is_some());
         assert!(json.get("edge_type").is_none());
+    }
+
+    #[test]
+    fn partial_eq_works_for_all_types() {
+        let a = NodeData::new("function".into(), "foo".into(), 1, 10, 10);
+        let b = NodeData::new("function".into(), "foo".into(), 1, 10, 10);
+        assert_eq!(a, b);
+
+        let c = NodeData::new("function".into(), "bar".into(), 1, 10, 10);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn constructors_produce_correct_defaults() {
+        let node = NodeData::new("struct".into(), "Foo".into(), 1, 5, 5);
+        assert!(!node.exported);
+        assert!(node.visibility.is_none());
+        assert!(node.cyclomatic.is_none());
+        assert!(node.calls.is_none());
+
+        let file = FileData::new("src/lib.rs".into(), "lib".into());
+        assert!(file.nodes.is_empty());
+        assert!(file.imports.is_empty());
+        assert!(file.git_churn_30d.is_none());
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn arb_call_info() -> impl Strategy<Value = CallInfo> {
+        ("[a-z]{1,8}", "[a-z]{1,8}", 0u32..100).prop_map(|(s, m, c)| CallInfo {
+            symbol: s,
+            module: m,
+            count: c,
+        })
+    }
+
+    fn arb_import_info() -> impl Strategy<Value = ImportInfo> {
+        ("[a-z]{1,8}", proptest::collection::vec("[a-z]{1,8}", 1..4))
+            .prop_map(|(f, n)| ImportInfo { from: f, names: n })
+    }
+
+    // Note: coverage (f64) is excluded — arbitrary f64 values can lose
+    // a ULP during JSON roundtrip. Deterministic tests cover f64 fields.
+    fn arb_node_data() -> impl Strategy<Value = NodeData> {
+        (
+            "[a-z]{1,8}",
+            "[a-z]{1,8}",
+            1u32..10000,
+            1u32..500,
+            any::<bool>(),
+            proptest::option::of(0u32..20),
+            proptest::option::of(0u32..50),
+            proptest::option::of(0u32..10),
+        )
+            .prop_map(
+                |(kind, name, start, delta, exported, params, cyclomatic, depth)| {
+                    let end = start + delta;
+                    let lines = delta + 1;
+                    NodeData {
+                        kind,
+                        name,
+                        exported,
+                        visibility: None,
+                        is_async: None,
+                        is_unsafe: None,
+                        start_line: start,
+                        end_line: end,
+                        lines,
+                        params,
+                        field_count: None,
+                        depth,
+                        cyclomatic,
+                        trait_name: None,
+                        git_churn_30d: None,
+                        coverage: None,
+                        co_changes: None,
+                        calls: None,
+                    }
+                },
+            )
+    }
+
+    fn arb_edge() -> impl Strategy<Value = Edge> {
+        ("[a-z]{1,8}", "[a-z]{1,8}", "[A-Z][a-z]{1,8}").prop_map(|(f, t, s)| Edge {
+            from_file: f,
+            to_file: t,
+            symbol: s,
+            edge_type: "import".to_string(),
+        })
+    }
+
+    fn arb_node_data_with_calls() -> impl Strategy<Value = NodeData> {
+        (
+            arb_node_data(),
+            proptest::option::of(proptest::collection::vec(arb_call_info(), 0..3)),
+        )
+            .prop_map(|(mut node, calls)| {
+                node.calls = calls;
+                node
+            })
+    }
+
+    fn arb_file_data() -> impl Strategy<Value = FileData> {
+        (
+            "[a-z/]{1,20}",
+            "[a-z]{1,8}",
+            proptest::collection::vec(arb_node_data_with_calls(), 0..4),
+            proptest::collection::vec(arb_import_info(), 0..3),
+        )
+            .prop_map(|(path, name, nodes, imports)| FileData {
+                path,
+                name,
+                nodes,
+                imports,
+                git_churn_30d: None,
+            })
+    }
+
+    fn arb_ast_data() -> impl Strategy<Value = AstData> {
+        (
+            proptest::collection::vec(arb_file_data(), 0..4),
+            proptest::collection::vec(arb_edge(), 0..4),
+        )
+            .prop_map(|(files, edges)| AstData { files, edges })
+    }
+
+    proptest! {
+        #[test]
+        fn ast_data_serde_roundtrip(data in arb_ast_data()) {
+            let json = serde_json::to_string(&data).unwrap();
+            let parsed: AstData = serde_json::from_str(&json).unwrap();
+            prop_assert_eq!(data, parsed);
+        }
+
+        #[test]
+        fn node_data_serde_roundtrip(node in arb_node_data()) {
+            let json = serde_json::to_string(&node).unwrap();
+            let parsed: NodeData = serde_json::from_str(&json).unwrap();
+            prop_assert_eq!(node, parsed);
+        }
     }
 }
