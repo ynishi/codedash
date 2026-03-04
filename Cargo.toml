@@ -49,7 +49,7 @@ git2 = { version = "0.20", features = ["vendored-libgit2"] }
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
 
 # Public schema (ACL boundary — domain model is internal)
-codedash-schemas = { path = "codedash-schemas" }
+codedash-schemas = { path = "codedash-schemas", version = "0.1.0" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
